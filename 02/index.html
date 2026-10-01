@@ -1,0 +1,2508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Elemental Cube Visualization // Botanical • Beach • Volcanic Lava</title>
+  
+  <!-- Modern Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+
+  <!-- Three.js and Addons via ES Modules -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <style>
+    :root {
+      --bg-dark: #07090e;
+      --panel-bg: rgba(14, 18, 28, 0.75);
+      --panel-border: rgba(255, 255, 255, 0.12);
+      --lava-neon: #ff5500;
+      --lava-glow: rgba(255, 85, 0, 0.45);
+      --beach-cyan: #06b6d4;
+      --beach-sand: #eab308;
+      --garden-green: #22c55e;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--bg-dark);
+      font-family: 'Outfit', sans-serif;
+      color: var(--text-main);
+    }
+
+    #webgl-canvas-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    /* Ambient vignette & subtle scanlines for cinematic feel */
+    .vignette-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 2;
+      background: radial-gradient(circle at center, transparent 55%, rgba(4, 6, 12, 0.8) 100%);
+    }
+
+    /* HUD Interface Overlay */
+    #hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 24px;
+      transition: opacity 0.3s ease;
+    }
+
+    #hud.hidden {
+      opacity: 0;
+      pointer-events: none !important;
+    }
+
+    /* Header Bar */
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+    }
+
+    .brand-card {
+      pointer-events: auto;
+      background: var(--panel-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      padding: 16px 22px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 1px rgba(255, 255, 255, 0.1);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-width: 440px;
+    }
+
+    .title-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-card h1 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 19px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      background: linear-gradient(135deg, #ffffff 40%, #ff8833 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .sketch-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(255, 120, 0, 0.18);
+      border: 1px solid rgba(255, 120, 0, 0.4);
+      color: #ffaa55;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 20px;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+    }
+
+    .brand-card p {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      line-height: 1.45;
+    }
+
+    /* Theme Badges Pill */
+    .ecosystem-pills {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+      flex-wrap: wrap;
+    }
+
+    .eco-pill {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .eco-pill.garden { border-color: rgba(34, 197, 94, 0.35); color: #86efac; }
+    .eco-pill.beach  { border-color: rgba(6, 182, 212, 0.35); color: #67e8f9; }
+    .eco-pill.lava   { border-color: rgba(255, 85, 0, 0.35);  color: #fdba74; }
+
+    /* Top Right Action Buttons */
+    .top-actions {
+      pointer-events: auto;
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn-action {
+      background: var(--panel-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 10px 14px;
+      color: var(--text-main);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+    }
+
+    .btn-action:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.25);
+      transform: translateY(-2px);
+    }
+
+    .btn-action.active {
+      background: rgba(255, 85, 0, 0.25);
+      border-color: #ff5500;
+      box-shadow: 0 0 16px var(--lava-glow);
+    }
+
+    /* Bottom Control Bar */
+    .bottom-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 16px;
+      width: 100%;
+    }
+
+    /* Preset Camera Viewpoints */
+    .camera-presets-card {
+      pointer-events: auto;
+      background: var(--panel-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      padding: 14px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+
+    .preset-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .preset-buttons {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .preset-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 9px;
+      padding: 8px 13px;
+      font-family: inherit;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text-main);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .preset-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      transform: translateY(-2px);
+    }
+
+    .preset-btn.active {
+      background: rgba(255, 255, 255, 0.18);
+      border-color: #fff;
+      box-shadow: 0 0 12px rgba(255, 255, 255, 0.3);
+    }
+
+    .preset-btn[data-view="sketch"].active {
+      border-color: #ffaa33;
+      background: rgba(255, 170, 51, 0.2);
+      box-shadow: 0 0 14px rgba(255, 170, 51, 0.4);
+    }
+    .preset-btn[data-view="garden"].active {
+      border-color: #22c55e;
+      background: rgba(34, 197, 94, 0.2);
+      box-shadow: 0 0 14px rgba(34, 197, 94, 0.4);
+    }
+    .preset-btn[data-view="beach"].active {
+      border-color: #06b6d4;
+      background: rgba(6, 182, 212, 0.2);
+      box-shadow: 0 0 14px rgba(6, 182, 212, 0.4);
+    }
+    .preset-btn[data-view="lava"].active {
+      border-color: #ff5500;
+      background: rgba(255, 85, 0, 0.2);
+      box-shadow: 0 0 14px rgba(255, 85, 0, 0.4);
+    }
+
+    /* Sliders & Parameters Panel */
+    .controls-panel {
+      pointer-events: auto;
+      background: var(--panel-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      padding: 14px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 250px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+
+    .control-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .control-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .control-val {
+      color: #ffaa44;
+      font-family: 'Space Grotesk', monospace;
+      font-size: 11px;
+    }
+
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #ff7722;
+      border: 2px solid #ffffff;
+      box-shadow: 0 0 8px rgba(255, 119, 34, 0.6);
+      cursor: pointer;
+      transition: transform 0.15s ease;
+    }
+
+    input[type=range]::-webkit-slider-thumb:hover {
+      transform: scale(1.25);
+    }
+
+    /* Shortcut Pills */
+    .hint-pill {
+      pointer-events: auto;
+      font-size: 11px;
+      color: var(--text-muted);
+      background: rgba(10, 14, 24, 0.7);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 20px;
+      padding: 6px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 2px;
+    }
+
+    .kbd {
+      background: rgba(255, 255, 255, 0.15);
+      color: #fff;
+      font-size: 9.5px;
+      font-family: monospace;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-weight: 700;
+    }
+
+    /* Loading Overlay */
+    #loader {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #05070c;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 22px;
+      transition: opacity 0.6s ease, visibility 0.6s ease;
+    }
+
+    #loader.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .spinner-cube {
+      width: 54px;
+      height: 54px;
+      position: relative;
+      transform-style: preserve-3d;
+      animation: spinBox 2.6s infinite ease-in-out;
+    }
+
+    @keyframes spinBox {
+      0%   { transform: rotateX(0deg) rotateY(0deg); }
+      50%  { transform: rotateX(180deg) rotateY(180deg); }
+      100% { transform: rotateX(360deg) rotateY(360deg); }
+    }
+
+    .spinner-face {
+      position: absolute;
+      width: 54px;
+      height: 54px;
+      border: 2px solid #ff6600;
+      background: rgba(255, 102, 0, 0.15);
+      box-shadow: 0 0 15px rgba(255, 102, 0, 0.4);
+    }
+    .spinner-face.f  { transform: translateZ(27px); border-color: #22c55e; background: rgba(34, 197, 94, 0.15); }
+    .spinner-face.b  { transform: rotateY(180deg) translateZ(27px); border-color: #06b6d4; background: rgba(6, 182, 212, 0.15); }
+    .spinner-face.r  { transform: rotateY(90deg) translateZ(27px); border-color: #06b6d4; background: rgba(6, 182, 212, 0.15); }
+    .spinner-face.l  { transform: rotateY(-90deg) translateZ(27px); border-color: #22c55e; background: rgba(34, 197, 94, 0.15); }
+    .spinner-face.u  { transform: rotateX(90deg) translateZ(27px); border-color: #ff5500; background: rgba(255, 85, 0, 0.2); }
+    .spinner-face.d  { transform: rotateX(-90deg) translateZ(27px); border-color: #ff5500; background: rgba(255, 85, 0, 0.2); }
+
+    .loader-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 14px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #ff9944;
+      animation: pulseText 1.6s infinite alternate;
+    }
+
+    @keyframes pulseText {
+      0% { opacity: 0.5; }
+      100% { opacity: 1; }
+    }
+
+    /* Small Screen Adjustments */
+    @media (max-width: 768px) {
+      #hud { padding: 14px; }
+      .brand-card { max-width: 100%; }
+      .bottom-bar { flex-direction: column-reverse; align-items: stretch; }
+      .controls-panel { min-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- WebGL Render Canvas -->
+  <div id="webgl-canvas-container"></div>
+  <div class="vignette-overlay"></div>
+
+  <!-- Loading Animation -->
+  <div id="loader">
+    <div class="spinner-cube">
+      <div class="spinner-face f"></div>
+      <div class="spinner-face b"></div>
+      <div class="spinner-face r"></div>
+      <div class="spinner-face l"></div>
+      <div class="spinner-face u"></div>
+      <div class="spinner-face d"></div>
+    </div>
+    <div class="loader-title">Synthesizing 3D Cube Biomes...</div>
+  </div>
+
+  <!-- Interactive HUD Interface -->
+  <div id="hud">
+    <!-- Top Navigation Header -->
+    <div class="top-bar">
+      <div class="brand-card">
+        <div class="title-row">
+          <h1>3D Elemental Cube</h1>
+          <span class="sketch-badge">✦ Hand-Drawn Spec</span>
+        </div>
+        <p>A procedural 6-faced cube visualization faithfully replicating the hand-drawn architecture with realistic PBR materials, dynamic ocean waves, glowing neon lava, and botanical vertical garden.</p>
+        <div class="ecosystem-pills">
+          <div class="eco-pill garden">🌿 2 Faces: Botanical Garden</div>
+          <div class="eco-pill beach">🏖️ 2 Faces: Beach &amp; Water</div>
+          <div class="eco-pill lava">🌋 2 Faces: Volcanic Lava</div>
+        </div>
+      </div>
+
+      <div class="top-actions">
+        <button class="btn-action" id="btn-sound" title="Toggle Procedural Audio Soundscape">
+          <span id="sound-icon">🔇</span>
+          <span id="sound-text">Sound: Off</span>
+        </button>
+        <button class="btn-action active" id="btn-rotate" title="Toggle Auto Rotation (Spacebar)">
+          <span>🔄</span>
+          <span>Rotate</span>
+        </button>
+        <button class="btn-action" id="btn-hud" title="Toggle HUD Display (Key H)">
+          <span>👁️</span>
+          <span>Hide UI</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Bottom Controls & Presets -->
+    <div class="bottom-bar">
+      <!-- Camera Presets -->
+      <div class="camera-presets-card">
+        <div class="preset-label">
+          <span>🔭 Camera Perspectives</span>
+        </div>
+        <div class="preset-buttons">
+          <button class="preset-btn active" data-view="sketch" title="Matches the handwritten sketch corner view">
+            <span>📐</span> Sketch Corner
+          </button>
+          <button class="preset-btn" data-view="garden" title="Focus on Botanical Vertical Garden">
+            <span>🌿</span> Botanical Wall
+          </button>
+          <button class="preset-btn" data-view="beach" title="Focus on Beach Sand &amp; Ocean">
+            <span>🏖️</span> Coastal Beach
+          </button>
+          <button class="preset-btn" data-view="lava" title="Focus on Volcanic Igneous Rock &amp; Lava">
+            <span>🌋</span> Volcanic Lava
+          </button>
+          <button class="preset-btn" data-view="reset" title="Reset View">
+            <span>↺</span> Reset
+          </button>
+        </div>
+        <div class="hint-pill">
+          <span>Controls: <span class="kbd">Left Click + Drag</span> Rotate • <span class="kbd">Scroll</span> Zoom • <span class="kbd">Right Click</span> Pan • <span class="kbd">Space</span> Rotate Toggle • <span class="kbd">0-3</span> Presets • <span class="kbd">R</span> Reset</span>
+        </div>
+      </div>
+
+      <!-- Fine Tuning Panel -->
+      <div class="controls-panel">
+        <div class="control-row">
+          <div class="control-header">
+            <span>ROTATION VELOCITY</span>
+            <span class="control-val" id="val-speed">1.0x</span>
+          </div>
+          <input type="range" id="slider-speed" min="0" max="3" step="0.1" value="1.0">
+        </div>
+        <div class="control-row">
+          <div class="control-header">
+            <span>LAVA BLOOM INTENSITY</span>
+            <span class="control-val" id="val-bloom">0.85x</span>
+          </div>
+          <input type="range" id="slider-bloom" min="0.2" max="2.0" step="0.05" value="0.85">
+        </div>
+        <div class="control-row">
+          <div class="control-header">
+            <span>OCEAN WAVE SPEED</span>
+            <span class="control-val" id="val-waves">1.0x</span>
+          </div>
+          <input type="range" id="slider-waves" min="0.2" max="2.5" step="0.1" value="1.0">
+        </div>
+        <div class="control-row">
+          <div class="control-header">
+            <span>RENDER PERFORMANCE</span>
+            <span class="control-val" id="val-fps">-- fps</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Three.js Application Logic -->
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+    // =========================================================================
+    // 1. PROCEDURAL SEEDED PRNG & NOISE GENERATION
+    // =========================================================================
+    class PRNG {
+      constructor(seed = 12345) {
+        this.s = seed % 2147483647;
+        if (this.s <= 0) this.s += 2147483646;
+      }
+      next() {
+        this.s = (this.s * 16807) % 2147483647;
+        return (this.s - 1) / 2147483646;
+      }
+      range(min, max) {
+        return min + this.next() * (max - min);
+      }
+    }
+
+    // Fast 2D Simplex / Value Noise Generator
+    class SimplexNoise2D {
+      constructor(seed = 42) {
+        const rng = new PRNG(seed);
+        this.p = new Uint8Array(512);
+        const perm = new Uint8Array(256);
+        for (let i = 0; i < 256; i++) perm[i] = i;
+        for (let i = 255; i > 0; i--) {
+          const j = Math.floor(rng.next() * (i + 1));
+          const t = perm[i];
+          perm[i] = perm[j];
+          perm[j] = t;
+        }
+        for (let i = 0; i < 512; i++) this.p[i] = perm[i & 255];
+      }
+
+      noise(x, y) {
+        const X = Math.floor(x) & 255;
+        const Y = Math.floor(y) & 255;
+        const xf = x - Math.floor(x);
+        const yf = y - Math.floor(y);
+
+        const fade = t => t * t * t * (t * (t * 6 - 15) + 10);
+        const u = fade(xf);
+        const v = fade(yf);
+
+        const grad = (hash, gx, gy) => {
+          const h = hash & 7;
+          const u_val = h < 4 ? gx : gy;
+          const v_val = h < 4 ? gy : gx;
+          return ((h & 1) ? -u_val : u_val) + ((h & 2) ? -v_val : v_val);
+        };
+
+        const aa = this.p[this.p[X] + Y];
+        const ab = this.p[this.p[X] + Y + 1];
+        const ba = this.p[this.p[X + 1] + Y];
+        const bb = this.p[this.p[X + 1] + Y + 1];
+
+        const x1 = grad(aa, xf, yf) * (1 - u) + grad(ba, xf - 1, yf) * u;
+        const x2 = grad(ab, xf, yf - 1) * (1 - u) + grad(bb, xf - 1, yf - 1) * u;
+        return (x1 * (1 - v) + x2 * v);
+      }
+
+      fbm(x, y, octaves = 4, persistence = 0.5) {
+        let total = 0;
+        let frequency = 1;
+        let amplitude = 1;
+        let maxValue = 0;
+        for (let i = 0; i < octaves; i++) {
+          total += this.noise(x * frequency, y * frequency) * amplitude;
+          maxValue += amplitude;
+          amplitude *= persistence;
+          frequency *= 2;
+        }
+        return total / maxValue;
+      }
+    }
+
+    // Helper: Convert Heightmap to Normal Map via Sobel Filter
+    function generateNormalMap(srcCtx, width, height, strength = 2.0) {
+      const imgData = srcCtx.getImageData(0, 0, width, height);
+      const data = imgData.data;
+      const normalCanvas = document.createElement('canvas');
+      normalCanvas.width = width;
+      normalCanvas.height = height;
+      const nCtx = normalCanvas.getContext('2d');
+      const nImgData = nCtx.createImageData(width, height);
+      const nData = nImgData.data;
+
+      const getLum = (x, y) => {
+        const px = (x + width) % width;
+        const py = (y + height) % height;
+        const idx = (py * width + px) * 4;
+        return (data[idx] * 0.299 + data[idx + 1] * 0.587 + data[idx + 2] * 0.114) / 255.0;
+      };
+
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const tl = getLum(x - 1, y - 1);
+          const t  = getLum(x,     y - 1);
+          const tr = getLum(x + 1, y - 1);
+          const l  = getLum(x - 1, y);
+          const r  = getLum(x + 1, y);
+          const bl = getLum(x - 1, y + 1);
+          const b  = getLum(x,     y + 1);
+          const br = getLum(x + 1, y + 1);
+
+          const dX = (tr + 2.0 * r + br) - (tl + 2.0 * l + bl);
+          const dY = (bl + 2.0 * b + br) - (tl + 2.0 * t + tr);
+          const dZ = 1.0 / strength;
+
+          const len = Math.sqrt(dX * dX + dY * dY + dZ * dZ);
+          const nX = (dX / len);
+          const nY = (dY / len);
+          const nZ = (dZ / len);
+
+          const idx = (y * width + x) * 4;
+          nData[idx]     = Math.floor((nX * 0.5 + 0.5) * 255);
+          nData[idx + 1] = Math.floor((nY * 0.5 + 0.5) * 255);
+          nData[idx + 2] = Math.floor((nZ * 0.5 + 0.5) * 255);
+          nData[idx + 3] = 255;
+        }
+      }
+      nCtx.putImageData(nImgData, 0, 0);
+      return normalCanvas;
+    }
+
+    // =========================================================================
+    // 2. THEME 1: BOTANICAL VERTICAL GARDEN TEXTURE GENERATOR
+    // =========================================================================
+    function createBotanicalGardenTexture(seed = 101) {
+      const width = 1024;
+      const height = 1024;
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      const rng = new PRNG(seed);
+      const simplex = new SimplexNoise2D(seed);
+
+      // A. Dense base undergrowth (deep moss, rich damp earth)
+      const baseGrad = ctx.createLinearGradient(0, 0, width, height);
+      baseGrad.addColorStop(0, '#0a2211');
+      baseGrad.addColorStop(0.5, '#12391b');
+      baseGrad.addColorStop(1, '#0e2b16');
+      ctx.fillStyle = baseGrad;
+      ctx.fillRect(0, 0, width, height);
+
+      // Micro moss stippling to fill all background completely
+      for (let i = 0; i < 6000; i++) {
+        const x = rng.next() * width;
+        const y = rng.next() * height;
+        const rad = rng.range(1.5, 4.5);
+        const gVal = Math.floor(rng.range(50, 110));
+        ctx.fillStyle = `rgba(${Math.floor(gVal*0.4)}, ${gVal}, ${Math.floor(gVal*0.3)}, 0.45)`;
+        ctx.beginPath();
+        ctx.arc(x, y, rad, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Helper: Draw realistic curved fern frond
+      const drawFernFrond = (cx, cy, length, angle, pinnules = 16) => {
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(angle);
+
+        ctx.strokeStyle = '#2d5a27';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(length * 0.5, -length * 0.08, length, 0);
+        ctx.stroke();
+
+        for (let i = 2; i < pinnules; i++) {
+          const t = i / pinnules;
+          const px = t * length;
+          const py = -Math.sin(t * Math.PI) * length * 0.08;
+          const pinLen = (1 - t * 0.7) * (length * 0.28);
+
+          // Left pinnule
+          ctx.fillStyle = (i % 2 === 0) ? '#2e7d32' : '#388e3c';
+          ctx.beginPath();
+          ctx.moveTo(px, py);
+          ctx.quadraticCurveTo(px - pinLen * 0.4, py - pinLen * 0.9, px + pinLen * 0.6, py - pinLen);
+          ctx.quadraticCurveTo(px + pinLen * 0.2, py - pinLen * 0.3, px, py);
+          ctx.fill();
+
+          // Right pinnule
+          ctx.fillStyle = (i % 2 === 0) ? '#1b5e20' : '#2e7d32';
+          ctx.beginPath();
+          ctx.moveTo(px, py);
+          ctx.quadraticCurveTo(px - pinLen * 0.4, py + pinLen * 0.9, px + pinLen * 0.6, py + pinLen);
+          ctx.quadraticCurveTo(px + pinLen * 0.2, py + pinLen * 0.3, px, py);
+          ctx.fill();
+        }
+        ctx.restore();
+      };
+
+      // Draw large fern fronds across background
+      for (let i = 0; i < 28; i++) {
+        const fx = rng.range(0, width);
+        const fy = rng.range(0, height);
+        const flen = rng.range(220, 420);
+        const frot = rng.range(0, Math.PI * 2);
+        drawFernFrond(fx, fy, flen, frot, Math.floor(rng.range(14, 22)));
+      }
+
+      // Helper: Draw broad Monstera / Philodendron leaf with veins
+      const drawBroadLeaf = (cx, cy, size, angle, hue = 135) => {
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(angle);
+
+        ctx.fillStyle = `hsl(${hue}, ${rng.range(60, 85)}%, ${rng.range(22, 34)}%)`;
+        ctx.beginPath();
+        ctx.moveTo(0, -size);
+        ctx.bezierCurveTo(size * 0.6, -size * 0.6, size * 0.7, size * 0.4, 0, size);
+        ctx.bezierCurveTo(-size * 0.7, size * 0.4, -size * 0.6, -size * 0.6, 0, -size);
+        ctx.fill();
+
+        // Leaf midrib & veins
+        ctx.strokeStyle = `hsla(${hue}, 40%, 65%, 0.4)`;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(0, -size);
+        ctx.lineTo(0, size);
+        ctx.stroke();
+
+        ctx.lineWidth = 1.2;
+        for (let y = -size * 0.7; y < size * 0.8; y += size * 0.18) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.quadraticCurveTo(size * 0.25, y - size * 0.08, size * 0.5, y - size * 0.15);
+          ctx.moveTo(0, y);
+          ctx.quadraticCurveTo(-size * 0.25, y - size * 0.08, -size * 0.5, y - size * 0.15);
+          ctx.stroke();
+        }
+        ctx.restore();
+      };
+
+      for (let i = 0; i < 35; i++) {
+        const lx = rng.range(0, width);
+        const ly = rng.range(0, height);
+        const lsize = rng.range(70, 160);
+        const lrot = rng.range(0, Math.PI * 2);
+        drawBroadLeaf(lx, ly, lsize, lrot, rng.range(120, 155));
+      }
+
+      // Helper: Draw English Garden Rose (as prominent in the sketch!)
+      const drawRose = (cx, cy, radius, primaryHue = 345) => {
+        ctx.save();
+        ctx.translate(cx, cy);
+
+        // Soft ambient petal glow shadow
+        ctx.fillStyle = 'rgba(10, 30, 15, 0.4)';
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 1.15, 0, Math.PI * 2);
+        ctx.fill();
+
+        const layers = 5;
+        for (let l = layers; l >= 1; l--) {
+          const r = (l / layers) * radius;
+          const petalCount = 4 + l * 2;
+          const rotOffset = l * 0.85;
+
+          for (let p = 0; p < petalCount; p++) {
+            const angle = (p / petalCount) * Math.PI * 2 + rotOffset;
+            const px = Math.cos(angle) * r * 0.6;
+            const py = Math.sin(angle) * r * 0.6;
+            const petRad = r * 0.55;
+
+            const pGrad = ctx.createRadialGradient(px, py, 2, px, py, petRad);
+            const light = 40 + (layers - l) * 11;
+            pGrad.addColorStop(0, `hsl(${primaryHue}, 85%, ${light + 14}%)`);
+            pGrad.addColorStop(0.7, `hsl(${primaryHue}, 75%, ${light}%)`);
+            pGrad.addColorStop(1, `hsl(${primaryHue - 10}, 80%, ${light - 16}%)`);
+
+            ctx.fillStyle = pGrad;
+            ctx.beginPath();
+            ctx.ellipse(px, py, petRad, petRad * 0.72, angle + Math.PI / 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Petal crisp rim
+            ctx.strokeStyle = `hsla(${primaryHue}, 85%, 85%, 0.45)`;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          }
+        }
+
+        // Deep rose spiral core
+        ctx.fillStyle = `hsl(${primaryHue - 15}, 90%, 25%)`;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 0.18, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+      };
+
+      // Helper: Draw blooming open Daisy / Wild Blossom with golden stamen
+      const drawDaisy = (cx, cy, radius, petalColor = '#ffffff') => {
+        ctx.save();
+        ctx.translate(cx, cy);
+
+        const petals = 10;
+        for (let i = 0; i < petals; i++) {
+          const a = (i / petals) * Math.PI * 2;
+          ctx.save();
+          ctx.rotate(a);
+          ctx.fillStyle = petalColor;
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.quadraticCurveTo(radius * 0.25, -radius * 0.5, 0, -radius);
+          ctx.quadraticCurveTo(-radius * 0.25, -radius * 0.5, 0, 0);
+          ctx.fill();
+
+          ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
+          ctx.lineWidth = 0.8;
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // Golden center stamen
+        const cGrad = ctx.createRadialGradient(0, 0, 1, 0, 0, radius * 0.32);
+        cGrad.addColorStop(0, '#fef08a');
+        cGrad.addColorStop(0.6, '#eab308');
+        cGrad.addColorStop(1, '#ca8a04');
+        ctx.fillStyle = cGrad;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 0.32, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Stamen pollen specks
+        for (let d = 0; d < 18; d++) {
+          const a = rng.next() * Math.PI * 2;
+          const dist = rng.next() * radius * 0.26;
+          ctx.fillStyle = '#78350f';
+          ctx.fillRect(Math.cos(a) * dist, Math.sin(a) * dist, 1.5, 1.5);
+        }
+        ctx.restore();
+      };
+
+      // Place hero English roses faithfully as sketched
+      const rosePositions = [
+        { x: width * 0.25, y: height * 0.35, r: 85, hue: 345 }, // Pink rose
+        { x: width * 0.70, y: height * 0.25, r: 75, hue: 355 }, // Crimson rose
+        { x: width * 0.45, y: height * 0.65, r: 92, hue: 340 }, // Grand central rose
+        { x: width * 0.80, y: height * 0.75, r: 78, hue: 15  }, // Coral peach rose
+        { x: width * 0.18, y: height * 0.80, r: 70, hue: 350 }, // Rose near corner
+        { x: width * 0.55, y: height * 0.18, r: 65, hue: 335 }  // Upper rose
+      ];
+
+      for (const rp of rosePositions) {
+        drawRose(rp.x + rng.range(-15, 15), rp.y + rng.range(-15, 15), rp.r * rng.range(0.95, 1.1), rp.hue);
+      }
+
+      // Scatter daisies and white/pink blossoms
+      for (let i = 0; i < 22; i++) {
+        const dx = rng.range(40, width - 40);
+        const dy = rng.range(40, height - 40);
+        const dr = rng.range(28, 48);
+        const col = (i % 3 === 0) ? '#fce7f3' : (i % 3 === 1) ? '#ffffff' : '#fef08a';
+        drawDaisy(dx, dy, dr, col);
+      }
+
+      // Scatter tiny blue/purple hydrangeas & jasmine flowers to fill every gap
+      for (let i = 0; i < 45; i++) {
+        const jx = rng.range(20, width - 20);
+        const jy = rng.range(20, height - 20);
+        const jr = rng.range(10, 18);
+        drawDaisy(jx, jy, jr, (i % 2 === 0) ? '#c4b5fd' : '#bae6fd');
+      }
+
+      // Add glistening dew drops with specular highlights
+      for (let i = 0; i < 70; i++) {
+        const rx = rng.next() * width;
+        const ry = rng.next() * height;
+        const rrad = rng.range(2, 6);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+        ctx.beginPath();
+        ctx.arc(rx, ry, rrad, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(rx - rrad * 0.35, ry - rrad * 0.35, rrad * 0.35, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Generate Normal Map from Botanical Garden
+      const normalCanvas = generateNormalMap(ctx, width, height, 2.5);
+
+      // Generate Roughness Map (velvety petals, glossy leaves, rough moss)
+      const roughCanvas = document.createElement('canvas');
+      roughCanvas.width = width;
+      roughCanvas.height = height;
+      const rCtx = roughCanvas.getContext('2d');
+      rCtx.fillStyle = '#666666';
+      rCtx.fillRect(0, 0, width, height);
+      rCtx.drawImage(canvas, 0, 0);
+
+      const rData = rCtx.getImageData(0, 0, width, height);
+      for (let i = 0; i < rData.data.length; i += 4) {
+        const lum = (rData.data[i] + rData.data[i+1] + rData.data[i+2]) / 3;
+        rData.data[i] = rData.data[i+1] = rData.data[i+2] = Math.floor(80 + (255 - lum) * 0.5);
+      }
+      rCtx.putImageData(rData, 0, 0);
+
+      const diffuse = new THREE.CanvasTexture(canvas);
+      // Only the colour map is sRGB; normal and roughness carry raw data and
+      // would be washed out by a colour-space conversion.
+      diffuse.colorSpace = THREE.SRGBColorSpace;
+      diffuse.anisotropy = 4;
+
+      return {
+        diffuse,
+        normal: new THREE.CanvasTexture(normalCanvas),
+        roughness: new THREE.CanvasTexture(roughCanvas)
+      };
+    }
+
+    // =========================================================================
+    // 3. THEME 2: BEACH ELEMENT TEXTURE GENERATOR (HALF SAND, HALF WATER)
+    // =========================================================================
+    class DynamicBeachTexture {
+      constructor(seed = 202, flipDiagonal = false) {
+        // Every drawing routine below is authored against a 1024x1024 design
+        // space, but the backing store is half that: these canvases are redrawn
+        // and re-uploaded to the GPU continuously, and at cube scale the extra
+        // pixels are not visible. Scaling the context keeps all the hand-tuned
+        // brush sizes, offsets and spacings correct at the smaller resolution.
+        this.dw = 1024;
+        this.dh = 1024;
+        this.width = 512;
+        this.height = 512;
+        this.rs = this.width / this.dw;
+
+        this.canvas = document.createElement('canvas');
+        this.canvas.width = this.width;
+        this.canvas.height = this.height;
+        this.ctx = this.canvas.getContext('2d');
+        this.ctx.scale(this.rs, this.rs);
+
+        this.seed = seed;
+        this.flipDiagonal = flipDiagonal;
+        this.rng = new PRNG(seed);
+        this.simplex = new SimplexNoise2D(seed);
+
+        // Precompute static sand & static caustics to optimize 60fps render
+        this.sandCanvas = document.createElement('canvas');
+        this.sandCanvas.width = this.width;
+        this.sandCanvas.height = this.height;
+        this.renderStaticSand();
+
+        this.texture = new THREE.CanvasTexture(this.canvas);
+        this.texture.colorSpace = THREE.SRGBColorSpace;
+        this.texture.wrapS = THREE.ClampToEdgeWrapping;
+        this.texture.wrapT = THREE.ClampToEdgeWrapping;
+
+        this.waveTime = 0;
+        this.update(0);
+      }
+
+      // Shoreline curve dividing half sand and half water diagonally as sketched!
+      getShorelineY(x, time = 0) {
+        // Diagonal split line from top-left to bottom-right
+        const slope = this.flipDiagonal ? -0.85 : 0.88;
+        const offset = this.flipDiagonal ? this.dh * 0.95 : this.dh * 0.08;
+        const baseX = x;
+        const baseY = offset + slope * baseX;
+
+        // Natural undulation & dynamic tidal wash wave
+        const undulation = Math.sin(x * 0.008 + this.seed) * 35 
+                         + Math.cos(x * 0.02 + this.seed * 1.5) * 16;
+        const tidalWash = Math.sin(time * 1.5 + x * 0.004) * 22;
+
+        return baseY + undulation + tidalWash;
+      }
+
+      renderStaticSand() {
+        const sCtx = this.sandCanvas.getContext('2d');
+        sCtx.scale(this.rs, this.rs);
+        const w = this.dw;
+        const h = this.dh;
+
+        // Warm golden sand gradient
+        const sandGrad = sCtx.createLinearGradient(0, 0, w, h);
+        sandGrad.addColorStop(0, '#fef08a');
+        sandGrad.addColorStop(0.3, '#fde047');
+        sandGrad.addColorStop(0.7, '#eab308');
+        sandGrad.addColorStop(1, '#ca8a04');
+        sCtx.fillStyle = sandGrad;
+        sCtx.fillRect(0, 0, w, h);
+
+        // Sand granular micro-stippling (grains of quartz, minerals, shells)
+        for (let i = 0; i < 24000; i++) {
+          const x = this.rng.next() * w;
+          const y = this.rng.next() * h;
+          const r = this.rng.range(0.8, 2.2);
+          const cType = this.rng.next();
+          if (cType > 0.8) {
+            sCtx.fillStyle = 'rgba(255, 255, 255, 0.45)'; // White quartz
+          } else if (cType > 0.4) {
+            sCtx.fillStyle = 'rgba(161, 98, 7, 0.35)';   // Amber grain
+          } else {
+            sCtx.fillStyle = 'rgba(67, 40, 16, 0.3)';    // Basalt speck
+          }
+          sCtx.fillRect(x, y, r, r);
+        }
+
+        // Wind ripples in sand
+        sCtx.strokeStyle = 'rgba(180, 120, 20, 0.12)';
+        sCtx.lineWidth = 6;
+        for (let y = 0; y < h; y += 45) {
+          sCtx.beginPath();
+          for (let x = 0; x < w; x += 30) {
+            const ny = y + Math.sin(x * 0.02 + y * 0.01) * 12;
+            if (x === 0) sCtx.moveTo(x, ny);
+            else sCtx.lineTo(x, ny);
+          }
+          sCtx.stroke();
+        }
+
+        // Scattered beach seashells & polished stones
+        for (let i = 0; i < 45; i++) {
+          const sx = this.rng.range(30, w - 30);
+          const sy = this.rng.range(30, h - 30);
+          const srad = this.rng.range(6, 14);
+
+          // Pebble or shell
+          if (i % 2 === 0) {
+            // Smooth beach pebble
+            sCtx.fillStyle = (i % 4 === 0) ? '#94a3b8' : '#cbd5e1';
+            sCtx.beginPath();
+            sCtx.ellipse(sx, sy, srad, srad * 0.7, this.rng.next() * Math.PI, 0, Math.PI * 2);
+            sCtx.fill();
+            sCtx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            sCtx.beginPath();
+            sCtx.arc(sx - srad * 0.3, sy - srad * 0.3, srad * 0.25, 0, Math.PI * 2);
+            sCtx.fill();
+          } else {
+            // Spiral seashell
+            sCtx.fillStyle = '#fce7f3';
+            sCtx.beginPath();
+            sCtx.arc(sx, sy, srad, 0, Math.PI * 1.5);
+            sCtx.fill();
+            sCtx.strokeStyle = '#f472b6';
+            sCtx.lineWidth = 1;
+            sCtx.stroke();
+          }
+        }
+      }
+
+      update(dt, waveSpeed = 1.0) {
+        this.waveTime += dt * waveSpeed;
+        const ctx = this.ctx;
+        const w = this.dw;
+        const h = this.dh;
+
+        // 1. Draw precomputed realistic sand base (stretched back over the full
+        //    design space, since the context is already scaled down).
+        ctx.drawImage(this.sandCanvas, 0, 0, w, h);
+
+        // 2. Draw wet sand gradient band along current shoreline
+        ctx.save();
+        ctx.beginPath();
+        for (let x = 0; x <= w; x += 16) {
+          const sy = this.getShorelineY(x, this.waveTime);
+          if (x === 0) ctx.moveTo(x, sy + 70);
+          else ctx.lineTo(x, sy + 70);
+        }
+        ctx.lineTo(w, h);
+        ctx.lineTo(0, h);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(113, 63, 18, 0.35)'; // Wet sand dark sheen
+        ctx.fill();
+        ctx.restore();
+
+        // 3. Draw Water Half with tropical ocean gradient
+        ctx.save();
+        ctx.beginPath();
+        if (!this.flipDiagonal) {
+          // Water occupies the upper half
+          ctx.moveTo(0, 0);
+          ctx.lineTo(w, 0);
+          for (let x = w; x >= 0; x -= 16) {
+            ctx.lineTo(x, this.getShorelineY(x, this.waveTime));
+          }
+        } else {
+          // Water occupies the other corner
+          ctx.moveTo(0, h);
+          ctx.lineTo(0, 0);
+          ctx.lineTo(w, 0);
+          for (let x = w; x >= 0; x -= 16) {
+            ctx.lineTo(x, this.getShorelineY(x, this.waveTime));
+          }
+        }
+        ctx.closePath();
+
+        const oceanGrad = ctx.createLinearGradient(0, 0, w, h);
+        oceanGrad.addColorStop(0, '#0369a1');    // Deep sapphire ocean
+        oceanGrad.addColorStop(0.4, '#0284c7');  // Tropical azure
+        oceanGrad.addColorStop(0.7, '#06b6d4');  // Turquoise lagoon
+        oceanGrad.addColorStop(0.9, '#22d3ee');  // Shallow aqua
+        oceanGrad.addColorStop(1, '#67e8f9');    // Glistening shoreline aqua
+        ctx.fillStyle = oceanGrad;
+        ctx.fill();
+
+        // 4. Underwater animated sunlight caustics web
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+        ctx.lineWidth = 3.0;
+        const causticSpacing = 40;
+        for (let cx = 0; cx < w; cx += causticSpacing) {
+          for (let cy = 0; cy < h; cy += causticSpacing) {
+            const shoreAtX = this.getShorelineY(cx, this.waveTime);
+            if (cy < shoreAtX) {
+              const ox = Math.sin(cy * 0.05 + this.waveTime * 2) * 10;
+              const oy = Math.cos(cx * 0.05 + this.waveTime * 2) * 10;
+              ctx.beginPath();
+              ctx.arc(cx + ox, cy + oy, 14, 0, Math.PI * 2);
+              ctx.stroke();
+            }
+          }
+        }
+
+        // 5. Dynamic Shoreline Wave Foam & Seafoam Lace
+        // Secondary wash wave
+        const waveOffset = Math.sin(this.waveTime * 2.2) * 15;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        for (let x = 0; x <= w; x += 10) {
+          const sy = this.getShorelineY(x, this.waveTime) + waveOffset * 0.2;
+          const foamJitter = Math.sin(x * 0.1 + this.waveTime * 4) * 4;
+          if (x === 0) ctx.moveTo(x, sy + foamJitter);
+          else ctx.lineTo(x, sy + foamJitter);
+        }
+        ctx.stroke();
+
+        // Delicate foam bubble clusters along wave crest
+        ctx.fillStyle = '#ffffff';
+        for (let x = 10; x < w; x += 18) {
+          const sy = this.getShorelineY(x, this.waveTime);
+          const fCount = 3 + Math.floor(Math.abs(Math.sin(x + this.waveTime)) * 4);
+          for (let k = 0; k < fCount; k++) {
+            const bx = x + (k - 2) * 4;
+            const by = sy + Math.sin(bx * 0.2) * 8 + (k * 2.5);
+            ctx.beginPath();
+            ctx.arc(bx, by, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        ctx.restore();
+
+        this.texture.needsUpdate = true;
+      }
+    }
+
+    // =========================================================================
+    // 4. THEME 3: VOLCANIC IGNEOUS ROCK & NEON LAVA TEXTURE GENERATOR
+    // =========================================================================
+    class DynamicVolcanicLavaTexture {
+      constructor(seed = 303) {
+        // Matches the beach textures: authored at 1024, stored at 512.
+        this.dw = 1024;
+        this.dh = 1024;
+        this.width = 512;
+        this.height = 512;
+        this.rs = this.width / this.dw;
+
+        this.canvas = document.createElement('canvas');
+        this.canvas.width = this.width;
+        this.canvas.height = this.height;
+        this.ctx = this.canvas.getContext('2d');
+        this.ctx.scale(this.rs, this.rs);
+
+        // Emissive canvas for UnrealBloomPass
+        this.emissiveCanvas = document.createElement('canvas');
+        this.emissiveCanvas.width = this.width;
+        this.emissiveCanvas.height = this.height;
+        this.eCtx = this.emissiveCanvas.getContext('2d');
+        this.eCtx.scale(this.rs, this.rs);
+
+        this.seed = seed;
+        this.rng = new PRNG(seed);
+        this.simplex = new SimplexNoise2D(seed);
+
+        // Pre-generate igneous rock basalt crust plates
+        this.rockCanvas = document.createElement('canvas');
+        this.rockCanvas.width = this.width;
+        this.rockCanvas.height = this.height;
+        this.renderStaticRock();
+
+        // Generate volcanic fissure crack paths (lava stripes as sketched!)
+        this.fissures = this.generateFissures();
+
+        this.diffuseTexture = new THREE.CanvasTexture(this.canvas);
+        this.diffuseTexture.colorSpace = THREE.SRGBColorSpace;
+        this.emissiveTexture = new THREE.CanvasTexture(this.emissiveCanvas);
+        this.emissiveTexture.colorSpace = THREE.SRGBColorSpace;
+
+        this.lavaTime = 0;
+        this.update(0);
+      }
+
+      renderStaticRock() {
+        const rCtx = this.rockCanvas.getContext('2d');
+        rCtx.scale(this.rs, this.rs);
+        const w = this.dw;
+        const h = this.dh;
+
+        // Dark volcanic basalt / obsidian base
+        const rockGrad = rCtx.createRadialGradient(w/2, h/2, 50, w/2, h/2, w * 0.7);
+        rockGrad.addColorStop(0, '#1c1917');
+        rockGrad.addColorStop(0.5, '#141211');
+        rockGrad.addColorStop(1, '#0c0a09');
+        rCtx.fillStyle = rockGrad;
+        rCtx.fillRect(0, 0, w, h);
+
+        // Rough volcanic texture with chiseled rock grain
+        for (let i = 0; i < 30000; i++) {
+          const x = this.rng.next() * w;
+          const y = this.rng.next() * h;
+          const r = this.rng.range(1, 3.5);
+          const c = Math.floor(this.rng.range(18, 55));
+          rCtx.fillStyle = `rgb(${c}, ${Math.floor(c*0.9)}, ${Math.floor(c*0.85)})`;
+          rCtx.fillRect(x, y, r, r);
+        }
+
+        // Charcoal / pumice pores and fracture seams
+        for (let i = 0; i < 70; i++) {
+          const px = this.rng.next() * w;
+          const py = this.rng.next() * h;
+          const prad = this.rng.range(3, 9);
+          rCtx.fillStyle = '#050505';
+          rCtx.beginPath();
+          rCtx.arc(px, py, prad, 0, Math.PI * 2);
+          rCtx.fill();
+        }
+      }
+
+      generateFissures() {
+        const fissures = [];
+        const count = 7;
+        for (let i = 0; i < count; i++) {
+          const points = [];
+          let x = (i / count) * this.dw + this.rng.range(-40, 40);
+          let y = 0;
+          points.push({ x, y });
+
+          const segments = 12;
+          for (let s = 1; s <= segments; s++) {
+            y = (s / segments) * this.dh;
+            x += this.rng.range(-70, 70);
+            points.push({ x: Math.max(20, Math.min(this.dw - 20, x)), y });
+          }
+
+          fissures.push({
+            points,
+            width: this.rng.range(18, 38),
+            speed: this.rng.range(0.8, 1.4),
+            phase: this.rng.range(0, Math.PI * 2)
+          });
+        }
+        return fissures;
+      }
+
+      update(dt) {
+        this.lavaTime += dt;
+        const ctx = this.ctx;
+        const eCtx = this.eCtx;
+        const w = this.dw;
+        const h = this.dh;
+
+        // 1. Draw static volcanic rock background (full design space; the context
+        //    carries the downscale).
+        ctx.drawImage(this.rockCanvas, 0, 0, w, h);
+
+        // 2. Clear emissive canvas to pure black (only lava glows!)
+        eCtx.fillStyle = '#000000';
+        eCtx.fillRect(0, 0, w, h);
+
+        // 3. Render molten lava stripes through each volcanic fissure
+        for (const fis of this.fissures) {
+          const pts = fis.points;
+          const pulse = Math.sin(this.lavaTime * 3 * fis.speed + fis.phase) * 0.15 + 0.85;
+          const curWidth = fis.width * pulse;
+
+          // Outer charred molten glow
+          ctx.save();
+          eCtx.save();
+
+          const drawFissurePath = (targetCtx, lineWidth, strokeStyle) => {
+            targetCtx.beginPath();
+            targetCtx.moveTo(pts[0].x, pts[0].y);
+            for (let i = 1; i < pts.length - 1; i++) {
+              const xc = (pts[i].x + pts[i + 1].x) / 2;
+              const yc = (pts[i].y + pts[i + 1].y) / 2;
+              targetCtx.quadraticCurveTo(pts[i].x, pts[i].y, xc, yc);
+            }
+            targetCtx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+            targetCtx.lineWidth = lineWidth;
+            targetCtx.strokeStyle = strokeStyle;
+            targetCtx.lineCap = 'round';
+            targetCtx.lineJoin = 'round';
+            targetCtx.stroke();
+          };
+
+          // Layer A: Molten deep crimson boundary
+          drawFissurePath(ctx, curWidth * 1.6, '#7f1d1d');
+          drawFissurePath(eCtx, curWidth * 1.6, '#991b1b');
+
+          // Layer B: Blazing neon orange-red magma
+          drawFissurePath(ctx, curWidth * 1.1, '#ff3b00');
+          drawFissurePath(eCtx, curWidth * 1.1, '#ff4400');
+
+          // Layer C: Intense electric neon orange
+          drawFissurePath(ctx, curWidth * 0.65, '#ff8800');
+          drawFissurePath(eCtx, curWidth * 0.65, '#ffaa00');
+
+          // Layer D: White-hot incandescent molten core
+          drawFissurePath(ctx, curWidth * 0.28, '#fffbeb');
+          drawFissurePath(eCtx, curWidth * 0.28, '#ffffff');
+
+          // Floating cooled obsidian crust islands inside the lava flow
+          for (let i = 2; i < pts.length - 2; i += 2) {
+            const cx = pts[i].x + Math.sin(this.lavaTime + i) * 6;
+            const cy = pts[i].y;
+            ctx.fillStyle = '#18181b';
+            ctx.beginPath();
+            ctx.ellipse(cx, cy, curWidth * 0.35, curWidth * 0.18, fis.phase, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          ctx.restore();
+          eCtx.restore();
+        }
+
+        this.diffuseTexture.needsUpdate = true;
+        this.emissiveTexture.needsUpdate = true;
+      }
+    }
+
+    // =========================================================================
+    // 5. PROCEDURAL AMBIENT SOUNDSCAPE SYNTHESIZER (WEB AUDIO API)
+    // =========================================================================
+    class AmbientSoundscape {
+      constructor() {
+        this.ctx = null;
+        this.enabled = false;
+        this.masterGain = null;
+        this.oceanGain = null;
+        this.lavaGain = null;
+        this.gardenGain = null;
+      }
+
+      init() {
+        if (this.ctx) return;
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        this.ctx = new AudioCtx();
+
+        this.masterGain = this.ctx.createGain();
+        this.masterGain.gain.setValueAtTime(0.001, this.ctx.currentTime);
+        this.masterGain.connect(this.ctx.destination);
+
+        // 1. Ocean surf generator (filtered pink/brown noise with rhythmic swell)
+        const surfBuffer = this.createNoiseBuffer(4.0);
+        const surfSource = this.ctx.createBufferSource();
+        surfSource.buffer = surfBuffer;
+        surfSource.loop = true;
+
+        const surfFilter = this.ctx.createBiquadFilter();
+        surfFilter.type = 'lowpass';
+        surfFilter.frequency.setValueAtTime(450, this.ctx.currentTime);
+
+        // Tidal swell LFO
+        const surfLfo = this.ctx.createOscillator();
+        surfLfo.frequency.setValueAtTime(0.18, this.ctx.currentTime);
+        const surfLfoGain = this.ctx.createGain();
+        surfLfoGain.gain.setValueAtTime(320, this.ctx.currentTime);
+        surfLfo.connect(surfLfoGain);
+        surfLfoGain.connect(surfFilter.frequency);
+        surfLfo.start();
+
+        this.oceanGain = this.ctx.createGain();
+        this.oceanGain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+        surfSource.connect(surfFilter);
+        surfFilter.connect(this.oceanGain);
+        this.oceanGain.connect(this.masterGain);
+        surfSource.start();
+
+        // 2. Volcanic Magma rumble (deep sub-bass resonance)
+        const subOsc = this.ctx.createOscillator();
+        subOsc.type = 'sawtooth';
+        subOsc.frequency.setValueAtTime(42, this.ctx.currentTime);
+
+        const subFilter = this.ctx.createBiquadFilter();
+        subFilter.type = 'lowpass';
+        subFilter.frequency.setValueAtTime(85, this.ctx.currentTime);
+        subFilter.Q.setValueAtTime(3.5, this.ctx.currentTime);
+
+        this.lavaGain = this.ctx.createGain();
+        this.lavaGain.gain.setValueAtTime(0.35, this.ctx.currentTime);
+        subOsc.connect(subFilter);
+        subFilter.connect(this.lavaGain);
+        this.lavaGain.connect(this.masterGain);
+        subOsc.start();
+
+        // 3. Garden foliage breeze (soft resonant wind)
+        const windBuffer = this.createNoiseBuffer(3.0);
+        const windSource = this.ctx.createBufferSource();
+        windSource.buffer = windBuffer;
+        windSource.loop = true;
+
+        const windFilter = this.ctx.createBiquadFilter();
+        windFilter.type = 'bandpass';
+        windFilter.frequency.setValueAtTime(900, this.ctx.currentTime);
+        windFilter.Q.setValueAtTime(2.0, this.ctx.currentTime);
+
+        this.gardenGain = this.ctx.createGain();
+        this.gardenGain.gain.setValueAtTime(0.25, this.ctx.currentTime);
+        windSource.connect(windFilter);
+        windFilter.connect(this.gardenGain);
+        this.gardenGain.connect(this.masterGain);
+        windSource.start();
+      }
+
+      createNoiseBuffer(seconds) {
+        const sampleRate = this.ctx.sampleRate;
+        const bufferSize = sampleRate * seconds;
+        const buffer = this.ctx.createBuffer(1, bufferSize, sampleRate);
+        const output = buffer.getChannelData(0);
+        let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+        for (let i = 0; i < bufferSize; i++) {
+          const white = Math.random() * 2 - 1;
+          b0 = 0.99886 * b0 + white * 0.0555179;
+          b1 = 0.99332 * b1 + white * 0.0750759;
+          b2 = 0.96900 * b2 + white * 0.1538520;
+          b3 = 0.86650 * b3 + white * 0.3104856;
+          b4 = 0.55000 * b4 + white * 0.5329522;
+          b5 = -0.7616 * b5 - white * 0.0168980;
+          output[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
+          b6 = white * 0.115926;
+        }
+        return buffer;
+      }
+
+      toggle() {
+        if (!this.ctx) this.init();
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+
+        this.enabled = !this.enabled;
+        const now = this.ctx.currentTime;
+        if (this.enabled) {
+          this.masterGain.gain.linearRampToValueAtTime(0.5, now + 1.2);
+        } else {
+          this.masterGain.gain.linearRampToValueAtTime(0.0001, now + 0.8);
+        }
+        return this.enabled;
+      }
+    }
+
+    // =========================================================================
+    // 6. MAIN APPLICATION INITIALIZATION & 3D SCENE SETUP
+    // =========================================================================
+    let scene, camera, renderer, controls, composer, bloomPass;
+    let cubeMesh, emberParticles, groundRig;
+    let dynamicBeach1, dynamicBeach2, dynamicLava1, dynamicLava2;
+    let autoRotate = true;
+    let btnRotateEl = null;
+    let rotateSpeedMultiplier = 1.0;
+    let waveSpeedMultiplier = 1.0;
+    const soundscape = new AmbientSoundscape();
+
+    // Camera target tween variables
+    let isTweeningCamera = false;
+    let camStartPos = new THREE.Vector3();
+    let camEndPos = new THREE.Vector3();
+    let camTargetStart = new THREE.Vector3();
+    let camTargetEnd = new THREE.Vector3();
+    let tweenProgress = 1.0;
+    const TWEEN_DURATION = 1.2;
+
+    // Cube orientation is tweened alongside the camera so a preset always lands
+    // square-on to the face it names instead of on whatever angle auto-rotation left.
+    // Single place that flips auto-rotation, so the HUD button can never drift
+    // out of sync with a hotkey or a camera preset.
+    function setAutoRotate(on) {
+      autoRotate = on;
+      if (btnRotateEl) btnRotateEl.classList.toggle('active', on);
+    }
+
+    let cubeQuatStart = new THREE.Quaternion();
+    let cubeQuatEnd = new THREE.Quaternion();
+    let autoRotateWasOn = false;
+
+    function init() {
+      const container = document.getElementById('webgl-canvas-container');
+
+      // A. Create Three.js Scene
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x06080e);
+
+      // B. Setup Camera with standard perspective
+      camera = new THREE.PerspectiveCamera(
+        42,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        100
+      );
+      // Default view: Isometric Sketch Corner Angle (matches sketch!). Far enough
+      // back, and aimed low enough, that the cube, the blooms breaking its
+      // silhouette and the shadow pooling under it all clear the HUD bars.
+      camera.position.set(4.1, 3.3, 4.5);
+
+      // C. WebGL Renderer with High-Performance Tone Mapping
+      renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.15;
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      container.appendChild(renderer.domElement);
+
+      // D. Smooth OrbitControls
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.minDistance = 2.2;
+      controls.maxDistance = 11.0;
+      controls.target.set(0, -0.42, 0);
+      // Orbiting below the floor stays allowed so the -Y lava face can be
+      // inspected; the ground plane hides itself once the camera drops under it.
+      controls.maxPolarAngle = Math.PI * 0.96;
+
+      // E. UnrealBloomPass Post-Processing (Neon lava aura & ocean glints)
+      const renderScene = new RenderPass(scene, camera);
+      bloomPass = new UnrealBloomPass(
+        new THREE.Vector2(window.innerWidth, window.innerHeight),
+        0.85,  // strength
+        0.45,  // radius
+        0.75   // threshold
+      );
+
+      composer = new EffectComposer(renderer);
+      composer.addPass(renderScene);
+      composer.addPass(bloomPass);
+
+      // F. Lighting Setup
+      // Key Sun Light
+      const sunLight = new THREE.DirectionalLight(0xfffaed, 2.2);
+      sunLight.position.set(5, 8, 4);
+      sunLight.castShadow = true;
+      sunLight.shadow.mapSize.width = 2048;
+      sunLight.shadow.mapSize.height = 2048;
+      // Tighten the shadow frustum around the cube: a wide default frustum wastes
+      // the whole shadow map on empty space and leaves the contact edge mushy.
+      sunLight.shadow.camera.left = -2.6;
+      sunLight.shadow.camera.right = 2.6;
+      sunLight.shadow.camera.top = 2.6;
+      sunLight.shadow.camera.bottom = -2.6;
+      sunLight.shadow.camera.near = 0.5;
+      sunLight.shadow.camera.far = 24;
+      sunLight.shadow.bias = -0.0008;
+      sunLight.shadow.normalBias = 0.02;
+      sunLight.shadow.radius = 3;
+      sunLight.shadow.camera.updateProjectionMatrix();
+      scene.add(sunLight);
+
+      // Ambient Fill
+      const ambientLight = new THREE.AmbientLight(0x222a3a, 1.4);
+      scene.add(ambientLight);
+
+      // Point Light 1: Fiery Volcanic Glow (radiating from top lava face)
+      const lavaLight = new THREE.PointLight(0xff5500, 3.5, 6);
+      lavaLight.position.set(0, 2.2, 0);
+      scene.add(lavaLight);
+
+      // Point Light 2: Turquoise Ocean Caustic Reflection
+      const waterLight = new THREE.PointLight(0x06b6d4, 2.0, 5);
+      waterLight.position.set(2.2, -0.2, 0.5);
+      scene.add(waterLight);
+
+      // Point Light 3: Botanical Living Wall Sunlight
+      const gardenLight = new THREE.PointLight(0x86efac, 1.8, 5);
+      gardenLight.position.set(0.5, 0.2, 2.2);
+      scene.add(gardenLight);
+
+      // G. Synthesize Textures for All 6 Cube Faces
+      // 1. Botanical Garden (2 faces)
+      const botanical1 = createBotanicalGardenTexture(101);
+      const botanical2 = createBotanicalGardenTexture(777);
+
+      // 2. Beach Elements: Half Sand, Half Water (2 faces)
+      dynamicBeach1 = new DynamicBeachTexture(202, false);
+      dynamicBeach2 = new DynamicBeachTexture(505, true);
+
+      // 3. Volcanic Igneous Rock & Neon Lava (2 faces)
+      dynamicLava1 = new DynamicVolcanicLavaTexture(303);
+      dynamicLava2 = new DynamicVolcanicLavaTexture(909);
+
+      // H. Build Materials for the 6 Faces
+      // Standard BoxGeometry face indices:
+      // 0: +X (Right)  -> Beach Element 1
+      // 1: -X (Left)   -> Botanical Garden 2
+      // 2: +Y (Top)    -> Volcanic Lava 1
+      // 3: -Y (Bottom) -> Volcanic Lava 2
+      // 4: +Z (Front)  -> Botanical Garden 1
+      // 5: -Z (Back)   -> Beach Element 2
+      // Notice: Default isometric camera view at (+X, +Y, +Z) immediately sees:
+      // Front (+Z: Botanical), Right (+X: Beach), Top (+Y: Lava) -> EXACT MATCH TO SKETCH!
+
+      const materials = [
+        // Face 0: +X (Right) -> Beach Element 1
+        new THREE.MeshStandardMaterial({
+          map: dynamicBeach1.texture,
+          roughness: 0.25,
+          metalness: 0.1
+        }),
+        // Face 1: -X (Left) -> Botanical Garden 2
+        new THREE.MeshStandardMaterial({
+          map: botanical2.diffuse,
+          normalMap: botanical2.normal,
+          roughnessMap: botanical2.roughness,
+          roughness: 0.65,
+          metalness: 0.05
+        }),
+        // Face 2: +Y (Top) -> Volcanic Lava 1
+        new THREE.MeshStandardMaterial({
+          map: dynamicLava1.diffuseTexture,
+          emissiveMap: dynamicLava1.emissiveTexture,
+          emissive: new THREE.Color(0xff4400),
+          emissiveIntensity: 2.2,
+          roughness: 0.75,
+          metalness: 0.2
+        }),
+        // Face 3: -Y (Bottom) -> Volcanic Lava 2
+        new THREE.MeshStandardMaterial({
+          map: dynamicLava2.diffuseTexture,
+          emissiveMap: dynamicLava2.emissiveTexture,
+          emissive: new THREE.Color(0xff4400),
+          emissiveIntensity: 2.2,
+          roughness: 0.75,
+          metalness: 0.2
+        }),
+        // Face 4: +Z (Front) -> Botanical Garden 1
+        new THREE.MeshStandardMaterial({
+          map: botanical1.diffuse,
+          normalMap: botanical1.normal,
+          roughnessMap: botanical1.roughness,
+          roughness: 0.65,
+          metalness: 0.05
+        }),
+        // Face 5: -Z (Back) -> Beach Element 2
+        new THREE.MeshStandardMaterial({
+          map: dynamicBeach2.texture,
+          roughness: 0.25,
+          metalness: 0.1
+        })
+      ];
+
+      // I. Create the Central 3D Cube Geometry
+      const cubeGeometry = new THREE.BoxGeometry(1.6, 1.6, 1.6, 16, 16, 16);
+      cubeMesh = new THREE.Mesh(cubeGeometry, materials);
+      cubeMesh.castShadow = true;
+      cubeMesh.receiveShadow = true;
+      scene.add(cubeMesh);
+
+      // J. Add 3D Botanical Elements Sprouting Outward (as in the sketch!)
+      addBotanical3DExtrusions(cubeMesh);
+
+      // K. Add 3D Volcanic Rising Ember Particles, parented to the cube so each
+      //    spark stays anchored to the fissure it erupted from.
+      addVolcanicEmberSystem(cubeMesh);
+
+      // L. Ground plane + contact shadow, grounding the cube as in the sketch.
+      groundRig = addGroundAndContactShadow(scene);
+
+      // M. Remove Loader Overlay
+      setTimeout(() => {
+        document.getElementById('loader').classList.add('hidden');
+      }, 500);
+
+      // N. Setup User Interface Handlers
+      setupEventListeners();
+
+      // O. Start Animation Loop
+      animate(0);
+    }
+
+    // Add 3D procedural roses, leaves, and buds protruding from the botanical faces.
+    // Every cluster is built pointing along +Y, then rotated so +Y lines up with the
+    // normal of the face it sits on -- so blooms open away from the cube, never into it.
+    function addBotanical3DExtrusions(parentCube) {
+      const flowerGroup = new THREE.Group();
+      const rng = new PRNG(4242);
+      const UP = new THREE.Vector3(0, 1, 0);
+      const HALF = 0.8; // half the 1.6 cube edge
+
+      // Shared materials: one per colour keeps the material count down.
+      const petalMats = new Map();
+      const getPetalMat = (hex) => {
+        if (!petalMats.has(hex)) {
+          petalMats.set(hex, new THREE.MeshStandardMaterial({
+            color: hex,
+            roughness: 0.45,
+            metalness: 0.03,
+            side: THREE.DoubleSide
+          }));
+        }
+        return petalMats.get(hex);
+      };
+      const coreMat = new THREE.MeshStandardMaterial({ color: 0x7c2d12, roughness: 0.7 });
+      const leafMat = new THREE.MeshStandardMaterial({
+        color: 0x1f8a3c, roughness: 0.55, metalness: 0.0, side: THREE.DoubleSide
+      });
+      const leafMatLight = new THREE.MeshStandardMaterial({
+        color: 0x4ade80, roughness: 0.5, metalness: 0.0, side: THREE.DoubleSide
+      });
+      const stemMat = new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.8 });
+
+      // Geometry built once and reused; all of it points along +Y = "outward".
+      const petalGeo = new THREE.SphereGeometry(0.055, 8, 6, 0, Math.PI * 2, 0, Math.PI * 0.55);
+      petalGeo.scale(1.25, 0.9, 0.7);
+      const coreGeo = new THREE.SphereGeometry(0.028, 8, 6);
+      const budGeo = new THREE.SphereGeometry(0.05, 8, 7);
+      budGeo.scale(0.85, 1.25, 0.85);
+      const leafGeo = new THREE.SphereGeometry(0.075, 7, 5);
+      leafGeo.scale(0.45, 1.35, 0.12);
+      leafGeo.translate(0, 0.085, 0);
+      const stemGeo = new THREE.CylinderGeometry(0.009, 0.014, 1, 5);
+
+      // A rose: concentric whorls of petals cupping open toward +Y.
+      const createRose = (colorHex, scale = 1.0) => {
+        const rose = new THREE.Group();
+        const mat = getPetalMat(colorHex);
+
+        const whorls = [
+          { count: 6, radius: 0.062, tilt: 0.95, lift: 0.000, s: 1.00 },
+          { count: 5, radius: 0.040, tilt: 0.62, lift: 0.018, s: 0.78 },
+          { count: 4, radius: 0.020, tilt: 0.32, lift: 0.032, s: 0.55 }
+        ];
+
+        for (let w = 0; w < whorls.length; w++) {
+          const { count, radius, tilt, lift, s } = whorls[w];
+          const spin = w * 0.55;
+          for (let i = 0; i < count; i++) {
+            const a = (i / count) * Math.PI * 2 + spin;
+            const petal = new THREE.Mesh(petalGeo, mat);
+            petal.position.set(Math.cos(a) * radius, lift, Math.sin(a) * radius);
+            // Cup the petal: the tip leans away from the centre, the face stays toward +Y.
+            petal.rotation.order = 'YXZ';
+            petal.rotation.y = -a;
+            petal.rotation.z = tilt;
+            petal.scale.setScalar(s);
+            petal.castShadow = true;
+            rose.add(petal);
+          }
+        }
+
+        const core = new THREE.Mesh(coreGeo, coreMat);
+        core.position.y = 0.040;
+        rose.add(core);
+
+        rose.scale.setScalar(scale);
+        return rose;
+      };
+
+      // A tight unopened bud, sepals hugging the base.
+      const createBud = (colorHex, scale = 1.0) => {
+        const bud = new THREE.Group();
+        const body = new THREE.Mesh(budGeo, getPetalMat(colorHex));
+        body.position.y = 0.045;
+        body.castShadow = true;
+        bud.add(body);
+
+        for (let i = 0; i < 3; i++) {
+          const sepal = new THREE.Mesh(leafGeo, leafMat);
+          const a = (i / 3) * Math.PI * 2;
+          sepal.scale.setScalar(0.45);
+          sepal.position.set(Math.cos(a) * 0.018, 0.01, Math.sin(a) * 0.018);
+          sepal.rotation.order = 'YXZ';
+          sepal.rotation.y = -a;
+          sepal.rotation.z = 0.7;
+          bud.add(sepal);
+        }
+        bud.scale.setScalar(scale);
+        return bud;
+      };
+
+      // A stem of the given length rising along +Y from the face.
+      const createStem = (length, thickness = 1.0) => {
+        const stem = new THREE.Mesh(stemGeo, stemMat);
+        stem.scale.set(thickness, length, thickness);
+        stem.position.y = length * 0.5;
+        stem.castShadow = true;
+        return stem;
+      };
+
+      // One bloom cluster: stem + head + a skirt of leaves fanning away from the face.
+      const createCluster = (colorHex, headScale, stemLen, leafCount, isBud) => {
+        const cluster = new THREE.Group();
+        cluster.add(createStem(stemLen, rng.range(0.85, 1.25)));
+
+        const head = isBud ? createBud(colorHex, headScale) : createRose(colorHex, headScale);
+        head.position.y = stemLen;
+        // Heads nod slightly off-axis so the cluster never looks stamped out.
+        head.rotation.x = rng.range(-0.3, 0.3);
+        head.rotation.z = rng.range(-0.3, 0.3);
+        cluster.add(head);
+
+        for (let i = 0; i < leafCount; i++) {
+          const leaf = new THREE.Mesh(leafGeo, rng.next() > 0.5 ? leafMat : leafMatLight);
+          const a = (i / leafCount) * Math.PI * 2 + rng.range(-0.4, 0.4);
+          const h = stemLen * rng.range(0.1, 0.6);
+          leaf.position.set(Math.cos(a) * 0.02, h, Math.sin(a) * 0.02);
+          leaf.rotation.order = 'YXZ';
+          leaf.rotation.y = -a;
+          // Leaves splay to roughly 60-85 deg off the face normal: outward and open.
+          leaf.rotation.z = rng.range(1.0, 1.45);
+          leaf.scale.setScalar(rng.range(0.75, 1.35));
+          leaf.castShadow = true;
+          cluster.add(leaf);
+        }
+        return cluster;
+      };
+
+      // Seat a cluster on a face: sit it on the surface and rotate +Y onto the normal.
+      const q = new THREE.Quaternion();
+      const tilt = new THREE.Quaternion();
+      const plantOnFace = (cluster, normal, u, v) => {
+        // Build the face's own basis so (u, v) sweep across the face plane.
+        const n = normal.clone().normalize();
+        const tangent = Math.abs(n.y) > 0.9
+          ? new THREE.Vector3(1, 0, 0)
+          : new THREE.Vector3(0, 1, 0).cross(n).normalize();
+        const bitangent = new THREE.Vector3().crossVectors(n, tangent).normalize();
+
+        cluster.position.copy(n).multiplyScalar(HALF - 0.01)
+          .addScaledVector(tangent, u)
+          .addScaledVector(bitangent, v);
+
+        q.setFromUnitVectors(UP, n);
+        // A little lean off the normal, the way plants reach for light.
+        tilt.setFromEuler(new THREE.Euler(
+          rng.range(-0.28, 0.28), rng.range(0, Math.PI * 2), rng.range(-0.28, 0.28)));
+        cluster.quaternion.copy(q).multiply(tilt);
+        flowerGroup.add(cluster);
+      };
+
+      const roseColors = [0xf43f5e, 0xfb7185, 0xbe123c, 0xffa0b5, 0xe11d48, 0xfda4af, 0xfff1f2];
+      // The two botanical faces: +Z (front) and -X (left) -- the pair the sketch covers.
+      const botanicalFaces = [
+        new THREE.Vector3(0, 0, 1),
+        new THREE.Vector3(-1, 0, 0)
+      ];
+
+      for (const normal of botanicalFaces) {
+        // A scattered field of blooms across the whole face, denser than the sketch's
+        // outline so no patch of the face reads as bare.
+        for (let i = 0; i < 26; i++) {
+          const cluster = createCluster(
+            roseColors[Math.floor(rng.next() * roseColors.length)],
+            rng.range(0.7, 1.25),
+            rng.range(0.05, 0.16),
+            3 + Math.floor(rng.next() * 3),
+            rng.next() > 0.62
+          );
+          plantOnFace(cluster, normal, rng.range(-0.66, 0.66), rng.range(-0.66, 0.66));
+        }
+
+        // Taller feature blooms, the ones breaking the cube's silhouette in the sketch.
+        for (let i = 0; i < 7; i++) {
+          const cluster = createCluster(
+            roseColors[Math.floor(rng.next() * roseColors.length)],
+            rng.range(1.15, 1.6),
+            rng.range(0.18, 0.30),
+            4 + Math.floor(rng.next() * 3),
+            false
+          );
+          plantOnFace(cluster, normal, rng.range(-0.6, 0.6), rng.range(-0.6, 0.6));
+        }
+
+        // Pure foliage tufts to close the gaps between blooms.
+        for (let i = 0; i < 20; i++) {
+          const tuft = new THREE.Group();
+          const blades = 3 + Math.floor(rng.next() * 3);
+          for (let b = 0; b < blades; b++) {
+            const leaf = new THREE.Mesh(leafGeo, rng.next() > 0.45 ? leafMat : leafMatLight);
+            const a = (b / blades) * Math.PI * 2 + rng.range(-0.3, 0.3);
+            leaf.position.set(Math.cos(a) * 0.012, 0.005, Math.sin(a) * 0.012);
+            leaf.rotation.order = 'YXZ';
+            leaf.rotation.y = -a;
+            leaf.rotation.z = rng.range(0.55, 1.2);
+            leaf.scale.setScalar(rng.range(0.7, 1.5));
+            leaf.castShadow = true;
+            tuft.add(leaf);
+          }
+          plantOnFace(tuft, normal, rng.range(-0.72, 0.72), rng.range(-0.72, 0.72));
+        }
+      }
+
+      // Blooms straddling the shared +Z / -X edge, which the sketch crowds hardest.
+      const edgeNormal = new THREE.Vector3(-1, 0, 1).normalize();
+      for (let i = 0; i < 9; i++) {
+        const cluster = createCluster(
+          roseColors[Math.floor(rng.next() * roseColors.length)],
+          rng.range(1.0, 1.5),
+          rng.range(0.10, 0.24),
+          4,
+          rng.next() > 0.75
+        );
+        // Ride the edge vertically; the diagonal normal keeps them opening outward.
+        cluster.position.copy(edgeNormal).multiplyScalar(HALF * Math.SQRT2 - 0.06);
+        cluster.position.y = rng.range(-0.74, 0.74);
+        q.setFromUnitVectors(UP, edgeNormal);
+        tilt.setFromEuler(new THREE.Euler(
+          rng.range(-0.35, 0.35), rng.range(0, Math.PI * 2), rng.range(-0.35, 0.35)));
+        cluster.quaternion.copy(q).multiply(tilt);
+        flowerGroup.add(cluster);
+      }
+
+      parentCube.add(flowerGroup);
+    }
+
+    // Add rising volcanic spark & ember particles.
+    // The system is parented to the cube, so every spark stays pinned to the lava
+    // fissure it erupted from while the cube turns. A world-up buoyancy term is
+    // transformed into cube space each frame so the sparks still drift true-up.
+    function addVolcanicEmberSystem(parentCube) {
+      const emberCount = 260;
+      const emberGeo = new THREE.BufferGeometry();
+      const positions = new Float32Array(emberCount * 3);
+      const velocities = new Float32Array(emberCount * 3);
+      const seeds = new Float32Array(emberCount);
+      const life = new Float32Array(emberCount);
+      const HALF = 0.8;
+
+      // Spawn a spark just off one of the two lava faces. Weighted hard toward
+      // the +Y face: the -Y face sits against the floor, so sparks leaving it are
+      // buried by the ground plane and would be wasted.
+      const spawn = (i, atSurface) => {
+        const isTop = Math.random() > 0.15;
+        const sign = isTop ? 1 : -1;
+        const drift = atSurface ? 0.0 : Math.random() * 0.9;
+
+        positions[i * 3]     = (Math.random() - 0.5) * 1.5;
+        positions[i * 3 + 1] = sign * (HALF + 0.02 + drift);
+        positions[i * 3 + 2] = (Math.random() - 0.5) * 1.5;
+
+        // Eruption velocity, in cube space, away from the face it left.
+        velocities[i * 3]     = (Math.random() - 0.5) * 0.22;
+        velocities[i * 3 + 1] = sign * (0.18 + Math.random() * 0.42);
+        velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.22;
+
+        seeds[i] = Math.random() * Math.PI * 2;
+        // A respawn starts a fresh spark; the initial seeding spreads lifetimes
+        // across the whole range so the column does not pulse in lockstep.
+        life[i] = atSurface ? 0 : Math.random();
+      };
+
+      for (let i = 0; i < emberCount; i++) spawn(i, false);
+
+      emberGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+      // Circular glowing particle sprite.
+      const pCanvas = document.createElement('canvas');
+      pCanvas.width = 32;
+      pCanvas.height = 32;
+      const pCtx = pCanvas.getContext('2d');
+      const radGrad = pCtx.createRadialGradient(16, 16, 0, 16, 16, 16);
+      radGrad.addColorStop(0, '#ffffff');
+      radGrad.addColorStop(0.3, '#ffaa00');
+      radGrad.addColorStop(0.7, '#ff3b00');
+      radGrad.addColorStop(1, 'rgba(255, 59, 0, 0)');
+      pCtx.fillStyle = radGrad;
+      pCtx.fillRect(0, 0, 32, 32);
+      const pTexture = new THREE.CanvasTexture(pCanvas);
+      pTexture.colorSpace = THREE.SRGBColorSpace;
+
+      const emberMat = new THREE.PointsMaterial({
+        size: 0.05,
+        map: pTexture,
+        transparent: true,
+        opacity: 0.95,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        sizeAttenuation: true,
+        color: 0xff7722
+      });
+
+      emberParticles = new THREE.Points(emberGeo, emberMat);
+      emberParticles.frustumCulled = false;
+      emberParticles.userData = { velocities, seeds, life, emberCount, spawn, HALF };
+
+      // Parented to the cube: the sparks rotate with the fissures that produced them.
+      parentCube.add(emberParticles);
+    }
+
+    // Advance the ember simulation one step (dt in seconds).
+    const _worldUp = new THREE.Vector3(0, 1, 0);
+    const _localUp = new THREE.Vector3();
+    const _invQuat = new THREE.Quaternion();
+
+    function updateEmbers(dt) {
+      if (!emberParticles) return;
+
+      const pos = emberParticles.geometry.attributes.position.array;
+      const { velocities: vel, seeds, life, emberCount: count, spawn, HALF } = emberParticles.userData;
+
+      // True "up" expressed in the cube's own frame, so buoyancy stays vertical
+      // on screen even though the particles live in cube space.
+      _invQuat.copy(cubeMesh.quaternion).invert();
+      _localUp.copy(_worldUp).applyQuaternion(_invQuat);
+
+      const buoyancy = 0.55 * dt;
+      const drag = Math.max(0, 1 - 1.1 * dt);
+
+      for (let i = 0; i < count; i++) {
+        const i3 = i * 3;
+
+        // Buoyancy pulls each spark toward real-world up, air drag bleeds the burst.
+        vel[i3]     = vel[i3] * drag + _localUp.x * buoyancy;
+        vel[i3 + 1] = vel[i3 + 1] * drag + _localUp.y * buoyancy;
+        vel[i3 + 2] = vel[i3 + 2] * drag + _localUp.z * buoyancy;
+
+        // Lateral flicker so the column shimmers rather than marching in straight lines.
+        const flicker = Math.sin(seeds[i] + life[i] * 6.0) * 0.06 * dt;
+        pos[i3]     += vel[i3] * dt + flicker;
+        pos[i3 + 1] += vel[i3 + 1] * dt;
+        pos[i3 + 2] += vel[i3 + 2] * dt - flicker;
+
+        life[i] += dt * 0.42;
+
+        // Retire the spark once it burns out or strays too far from the cube.
+        const dist = Math.abs(pos[i3]) + Math.abs(pos[i3 + 1]) + Math.abs(pos[i3 + 2]);
+        if (life[i] > 1.0 || dist > 7.5) spawn(i, true);
+      }
+
+      emberParticles.geometry.attributes.position.needsUpdate = true;
+    }
+
+    // =========================================================================
+    // 6b. GROUND PLANE & CONTACT SHADOW
+    // =========================================================================
+    // The sketch rests the cube on a ruled line with a heavy shadow pooling under
+    // it. A shadow-catcher plane gives the real cast shadow; a baked radial blob
+    // underneath supplies the tight ambient-occlusion contact the light cannot.
+    function addGroundAndContactShadow(scene) {
+      // Just clear of the cube's lowest sweep: half-edge 0.8 plus the corner dip
+      // from the gentle X wobble. Close enough that the cube reads as resting on
+      // the line the sketch draws under it.
+      const groundY = -0.96;
+
+      // A. Faintly lit floor that both catches the cast shadow and fades to the
+      //    background colour at the edges instead of ending on a hard rim. One
+      //    surface only -- a separate ShadowMaterial catcher on top of this would
+      //    composite the same shadow twice and crush it to black.
+      const floorCanvas = document.createElement('canvas');
+      floorCanvas.width = floorCanvas.height = 512;
+      const fCtx = floorCanvas.getContext('2d');
+      const fGrad = fCtx.createRadialGradient(256, 256, 20, 256, 256, 256);
+      fGrad.addColorStop(0.00, '#4a596f');
+      fGrad.addColorStop(0.28, '#3a4659');
+      fGrad.addColorStop(0.58, '#1c2433');
+      fGrad.addColorStop(1.00, '#06080e');
+      fCtx.fillStyle = fGrad;
+      fCtx.fillRect(0, 0, 512, 512);
+
+      const floorTex = new THREE.CanvasTexture(floorCanvas);
+      floorTex.colorSpace = THREE.SRGBColorSpace;
+      const floor = new THREE.Mesh(
+        new THREE.PlaneGeometry(22, 22),
+        new THREE.MeshStandardMaterial({
+          map: floorTex,
+          roughness: 0.92,
+          metalness: 0.0
+        })
+      );
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.y = groundY;
+      floor.receiveShadow = true;
+      scene.add(floor);
+
+      // B. Baked contact shadow: a soft dark ellipse hugging the cube's footprint.
+      //    The cast shadow alone goes soft right where it should be tightest, so
+      //    this supplies the dense ambient-occlusion core the sketch shades in.
+      const blobCanvas = document.createElement('canvas');
+      blobCanvas.width = blobCanvas.height = 256;
+      const bCtx = blobCanvas.getContext('2d');
+      const bGrad = bCtx.createRadialGradient(128, 128, 0, 128, 128, 128);
+      bGrad.addColorStop(0.00, 'rgba(0, 0, 0, 0.92)');
+      bGrad.addColorStop(0.30, 'rgba(0, 0, 0, 0.74)');
+      bGrad.addColorStop(0.58, 'rgba(0, 0, 0, 0.38)');
+      bGrad.addColorStop(0.80, 'rgba(0, 0, 0, 0.12)');
+      bGrad.addColorStop(1.00, 'rgba(0, 0, 0, 0.0)');
+      bCtx.fillStyle = bGrad;
+      bCtx.fillRect(0, 0, 256, 256);
+
+      const blobTex = new THREE.CanvasTexture(blobCanvas);
+      const contactShadow = new THREE.Mesh(
+        new THREE.PlaneGeometry(3.1, 3.1),
+        new THREE.MeshBasicMaterial({
+          map: blobTex,
+          transparent: true,
+          opacity: 0.95,
+          depthWrite: false,
+          blending: THREE.NormalBlending
+        })
+      );
+      contactShadow.rotation.x = -Math.PI / 2;
+      // Pushed toward screen-left and slightly toward the camera, matching where
+      // the sketch lays its shadow in under the cube.
+      contactShadow.position.set(-0.38, groundY + 0.004, 0.24);
+      contactShadow.renderOrder = 1;
+      scene.add(contactShadow);
+
+      // C. Warm pool of bounced lava light on the floor beneath the -Y lava face.
+      const bounceCanvas = document.createElement('canvas');
+      bounceCanvas.width = bounceCanvas.height = 128;
+      const lCtx = bounceCanvas.getContext('2d');
+      const lGrad = lCtx.createRadialGradient(64, 64, 0, 64, 64, 64);
+      lGrad.addColorStop(0.00, 'rgba(255, 110, 0, 0.30)');
+      lGrad.addColorStop(0.40, 'rgba(255, 60, 0, 0.11)');
+      lGrad.addColorStop(1.00, 'rgba(255, 40, 0, 0.0)');
+      lCtx.fillStyle = lGrad;
+      lCtx.fillRect(0, 0, 128, 128);
+
+      const lavaPool = new THREE.Mesh(
+        new THREE.PlaneGeometry(4.0, 4.0),
+        new THREE.MeshBasicMaterial({
+          map: new THREE.CanvasTexture(bounceCanvas),
+          transparent: true,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false
+        })
+      );
+      lavaPool.rotation.x = -Math.PI / 2;
+      lavaPool.position.y = groundY + 0.008;
+      lavaPool.renderOrder = 2;
+      scene.add(lavaPool);
+
+      return { floor, contactShadow, lavaPool, groundY };
+    }
+
+    // =========================================================================
+    // 7. USER INTERFACE & CAMERA TRANSITION ENGINE
+    // =========================================================================
+    function setupEventListeners() {
+      // Auto-rotation toggle button
+      const btnRotate = document.getElementById('btn-rotate');
+      btnRotateEl = btnRotate;
+      btnRotate.addEventListener('click', () => setAutoRotate(!autoRotate));
+
+      // Sound toggle button
+      const btnSound = document.getElementById('btn-sound');
+      const soundIcon = document.getElementById('sound-icon');
+      const soundText = document.getElementById('sound-text');
+      btnSound.addEventListener('click', () => {
+        const isPlaying = soundscape.toggle();
+        soundIcon.textContent = isPlaying ? '🔊' : '🔇';
+        soundText.textContent = isPlaying ? 'Sound: On' : 'Sound: Off';
+        btnSound.classList.toggle('active', isPlaying);
+      });
+
+      // Hide / Show HUD button
+      const btnHud = document.getElementById('btn-hud');
+      const hud = document.getElementById('hud');
+      btnHud.addEventListener('click', () => {
+        hud.classList.toggle('hidden');
+      });
+
+      // Sliders
+      const sliderSpeed = document.getElementById('slider-speed');
+      const valSpeed = document.getElementById('val-speed');
+      sliderSpeed.addEventListener('input', (e) => {
+        rotateSpeedMultiplier = parseFloat(e.target.value);
+        valSpeed.textContent = `${rotateSpeedMultiplier.toFixed(1)}x`;
+      });
+
+      const sliderBloom = document.getElementById('slider-bloom');
+      const valBloom = document.getElementById('val-bloom');
+      sliderBloom.addEventListener('input', (e) => {
+        const strength = parseFloat(e.target.value);
+        bloomPass.strength = strength;
+        valBloom.textContent = `${strength.toFixed(2)}x`;
+      });
+
+      const sliderWaves = document.getElementById('slider-waves');
+      const valWaves = document.getElementById('val-waves');
+      sliderWaves.addEventListener('input', (e) => {
+        waveSpeedMultiplier = parseFloat(e.target.value);
+        valWaves.textContent = `${waveSpeedMultiplier.toFixed(1)}x`;
+      });
+
+      // Camera preset viewpoint buttons
+      const presetButtons = document.querySelectorAll('.preset-btn');
+      presetButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+          handleCameraPreset(btn.getAttribute('data-view'));
+        });
+      });
+
+      // A click leaves the button focused, so drop focus afterwards: otherwise
+      // Space reaches both this handler and the focused button and the two
+      // toggles cancel each other out.
+      document.querySelectorAll('button').forEach(b => {
+        b.addEventListener('click', () => b.blur());
+      });
+
+      // Keyboard shortcuts
+      window.addEventListener('keydown', (e) => {
+        // Leave the sliders alone -- arrow keys and Space belong to them.
+        if (e.target && e.target.tagName === 'INPUT') return;
+
+        if (e.code === 'Space') {
+          e.preventDefault();
+          setAutoRotate(!autoRotate);
+        } else if (e.key === 'h' || e.key === 'H') {
+          hud.classList.toggle('hidden');
+        } else if (e.key === 'm' || e.key === 'M') {
+          btnSound.click();
+        } else if (e.key === '0') {
+          handleCameraPreset('sketch');
+        } else if (e.key === '1') {
+          handleCameraPreset('garden');
+        } else if (e.key === '2') {
+          handleCameraPreset('beach');
+        } else if (e.key === '3') {
+          handleCameraPreset('lava');
+        } else if (e.key === 'r' || e.key === 'R') {
+          handleCameraPreset('reset');
+        }
+      });
+
+      // Window resize handler
+      window.addEventListener('resize', onWindowResize);
+    }
+
+    function handleCameraPreset(view) {
+      // Keep the HUD buttons in sync no matter whether a click or a hotkey got us here.
+      document.querySelectorAll('.preset-btn').forEach(b => {
+        b.classList.toggle('active', b.getAttribute('data-view') === view);
+      });
+
+      const faceOn = (view === 'garden' || view === 'beach' || view === 'lava');
+
+      camStartPos.copy(camera.position);
+      camTargetStart.copy(controls.target);
+      // A face-on view centres the face; a corner view drops the aim so the
+      // ground and its shadow stay in frame beneath the cube.
+      camTargetEnd.set(0, faceOn ? 0 : -0.42, 0);
+
+      // Target orientation: identity, so the named face squares up with the camera.
+      cubeQuatStart.copy(cubeMesh.quaternion);
+      cubeQuatEnd.identity();
+
+      if (view === 'sketch') {
+        // Matches the handwritten sketch corner view
+        camEndPos.set(4.1, 3.3, 4.5);
+      } else if (view === 'garden') {
+        // Direct focus onto Botanical Vertical Garden face (+Z)
+        camEndPos.set(0, 0, 3.9);
+      } else if (view === 'beach') {
+        // Direct focus onto Beach Sand & Ocean face (+X)
+        camEndPos.set(3.9, 0, 0);
+      } else if (view === 'lava') {
+        // Direct focus onto Volcanic Lava face (+Y); nudged off the pole so the
+        // orbit controls keep a stable up-vector instead of flipping.
+        camEndPos.set(0, 3.8, 0.5);
+      } else if (view === 'reset') {
+        camEndPos.set(4.1, 3.3, 4.5);
+      }
+
+      // Hold auto-rotation while we fly. A corner view resumes whatever the user
+      // had set; a face-on view parks the spin so the face stays readable.
+      autoRotateWasOn = (view === 'sketch' || view === 'reset') ? autoRotate : false;
+      isTweeningCamera = true;
+      tweenProgress = 0.0;
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      composer.setSize(window.innerWidth, window.innerHeight);
+      bloomPass.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    // =========================================================================
+    // 8. RENDER & ANIMATION LOOP
+    // =========================================================================
+    let lastTime = 0;
+
+    // Dynamic canvas textures are the single most expensive thing per frame: four
+    // 512x512 canvases redrawn and re-uploaded. They are stepped on a fixed 30 Hz
+    // clock and split across alternating ticks, so at most two are rebuilt in any
+    // one frame. Their internal clocks advance by real elapsed time, so halving the
+    // update rate slows nothing down -- it only costs temporal resolution.
+    let texAccumulator = 0;
+    let texTick = 0;
+    let texHz = 30;
+
+    // Rolling frame-rate estimate, used both for the HUD and to back off the
+    // texture rate automatically on slower machines.
+    let fpsAccum = 0;
+    let fpsFrames = 0;
+    let smoothedFps = 60;
+    const fpsReadout = () => document.getElementById('val-fps');
+
+    const _slerpQuat = new THREE.Quaternion();
+
+    function animate(currentTime) {
+      requestAnimationFrame(animate);
+
+      // Clamp the step: a backgrounded tab returns a huge delta that would
+      // teleport the particles and jump every animation forward at once.
+      let delta = (currentTime - lastTime) * 0.001;
+      if (!isFinite(delta) || delta <= 0) delta = 1 / 60;
+      delta = Math.min(delta, 0.1);
+      lastTime = currentTime;
+
+      // ---- 1. Frame-rate tracking and adaptive texture budget -------------
+      fpsAccum += delta;
+      fpsFrames++;
+      if (fpsAccum >= 0.5) {
+        smoothedFps = fpsFrames / fpsAccum;
+        fpsAccum = 0;
+        fpsFrames = 0;
+
+        // Back the texture clock down on slow hardware, restore it when there is
+        // headroom again. The hysteresis gap keeps it from oscillating.
+        if (smoothedFps < 38 && texHz > 15) texHz = 15;
+        else if (smoothedFps > 52 && texHz < 30) texHz = 30;
+
+        const el = fpsReadout();
+        if (el) el.textContent = `${Math.round(smoothedFps)} fps`;
+      }
+
+      // ---- 2. Dynamic texture animation, fixed step, staggered ------------
+      const texStep = 1 / texHz;
+      texAccumulator += delta;
+      if (texAccumulator >= texStep) {
+        // Never run more than one catch-up step: dropping frames is far cheaper
+        // than rebuilding four canvases twice in a row.
+        const stepDt = Math.min(texAccumulator, texStep * 2);
+        texAccumulator = 0;
+
+        if ((texTick & 1) === 0) {
+          if (dynamicBeach1) dynamicBeach1.update(stepDt * 2, waveSpeedMultiplier);
+          if (dynamicBeach2) dynamicBeach2.update(stepDt * 2, waveSpeedMultiplier);
+        } else {
+          if (dynamicLava1) dynamicLava1.update(stepDt * 2);
+          if (dynamicLava2) dynamicLava2.update(stepDt * 2);
+        }
+        texTick++;
+      }
+
+      // ---- 3. Auto-rotation ------------------------------------------------
+      if (autoRotate && !isTweeningCamera) {
+        // Scaled by delta so the spin rate is the same at 30 fps and at 144 fps.
+        cubeMesh.rotation.y += 0.36 * rotateSpeedMultiplier * delta;
+        cubeMesh.rotation.x = Math.sin(currentTime * 0.0008) * 0.08;
+      }
+
+      // ---- 4. Camera + cube orientation tween ------------------------------
+      if (isTweeningCamera) {
+        tweenProgress += delta / TWEEN_DURATION;
+        if (tweenProgress >= 1.0) {
+          tweenProgress = 1.0;
+          isTweeningCamera = false;
+          // Hand the spin back, syncing the HUD button with it.
+          setAutoRotate(autoRotateWasOn);
+        }
+
+        // Smooth cubic ease-in-out
+        const t = tweenProgress < 0.5
+          ? 4 * tweenProgress * tweenProgress * tweenProgress
+          : 1 - Math.pow(-2 * tweenProgress + 2, 3) / 2;
+
+        camera.position.lerpVectors(camStartPos, camEndPos, t);
+        controls.target.lerpVectors(camTargetStart, camTargetEnd, t);
+
+        // Slerp the cube square-on at the same time, so a preset lands looking at
+        // the face it names rather than at whatever angle the spin left behind.
+        _slerpQuat.copy(cubeQuatStart).slerp(cubeQuatEnd, t);
+        cubeMesh.quaternion.copy(_slerpQuat);
+      }
+
+      // ---- 5. Volcanic embers ---------------------------------------------
+      updateEmbers(delta);
+
+      // ---- 6. Contact shadow reacts to the cube ---------------------------
+      if (groundRig) {
+        // Breathe the lava pool with the same pulse driving the fissures, and let
+        // the contact shadow spread a touch as the cube turns corner-on.
+        const pulse = 0.48 + Math.sin(currentTime * 0.0016) * 0.09;
+        groundRig.lavaPool.material.opacity = pulse;
+
+        const spread = 1.0 + Math.abs(Math.sin(cubeMesh.rotation.y)) * 0.06;
+        groundRig.contactShadow.scale.set(spread * 1.18, spread * 0.92, 1);
+
+        // Looking up from beneath the floor, hide it rather than let it block the
+        // -Y lava face. The cast shadow goes with it, since it has nothing to
+        // fall on once the floor is gone.
+        const aboveFloor = camera.position.y > groundRig.groundY + 0.02;
+        groundRig.floor.visible = aboveFloor;
+        groundRig.contactShadow.visible = aboveFloor;
+        groundRig.lavaPool.visible = aboveFloor;
+      }
+
+      controls.update();
+      composer.render();
+    }
+
+    // Initialize on window load
+    window.addEventListener('load', init);
+  </script>
+</body>
+</html>
