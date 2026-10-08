@@ -4,14 +4,21 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>3D Elemental Cube Visualization // Botanical • Beach • Volcanic Lava</title>
-
+  
   <!-- Modern Typography -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
 
-  <!-- XTK (The X Toolkit) - WebGL scene graph, renderer, camera and interactor -->
-  <script type="text/javascript" src="https://get.goXTK.com/xtk_edge.js"></script>
+  <!-- Three.js and Addons via ES Modules -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
 
   <style>
     :root {
@@ -122,7 +129,6 @@
       letter-spacing: 0.5px;
       background: linear-gradient(135deg, #ffffff 40%, #ff8833 100%);
       -webkit-background-clip: text;
-      background-clip: text;
       -webkit-text-fill-color: transparent;
     }
 
@@ -335,7 +341,6 @@
 
     input[type=range] {
       -webkit-appearance: none;
-      appearance: none;
       width: 100%;
       height: 4px;
       background: rgba(255, 255, 255, 0.15);
@@ -459,27 +464,6 @@
       .bottom-bar { flex-direction: column-reverse; align-items: stretch; }
       .controls-panel { min-width: 100%; }
     }
-  
-
-    /* Baked bloom halo - XTK has no post-processing pass, so the lava aura is
-       a composited overlay driven by the same slider. */
-    .lava-glow {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-      z-index: 2;
-      opacity: 0.425;
-      background: radial-gradient(circle at center,
-                  rgba(255, 85, 0, 0.20) 0%,
-                  rgba(255, 85, 0, 0.07) 38%,
-                  transparent 66%);
-      mix-blend-mode: screen;
-      transition: opacity 0.2s ease;
-    }
-
   </style>
 </head>
 <body>
@@ -487,7 +471,6 @@
   <!-- WebGL Render Canvas -->
   <div id="webgl-canvas-container"></div>
   <div class="vignette-overlay"></div>
-  <div class="lava-glow"></div>
 
   <!-- Loading Animation -->
   <div id="loader">
@@ -511,7 +494,7 @@
           <h1>3D Elemental Cube</h1>
           <span class="sketch-badge">✦ Hand-Drawn Spec</span>
         </div>
-        <p>A procedural 6-faced cube visualization faithfully replicating the hand-drawn architecture with baked physical lighting, dynamic ocean waves, glowing neon lava, and botanical vertical garden.</p>
+        <p>A procedural 6-faced cube visualization faithfully replicating the hand-drawn architecture with realistic PBR materials, dynamic ocean waves, glowing neon lava, and botanical vertical garden.</p>
         <div class="ecosystem-pills">
           <div class="eco-pill garden">🌿 2 Faces: Botanical Garden</div>
           <div class="eco-pill beach">🏖️ 2 Faces: Beach &amp; Water</div>
@@ -591,10 +574,13 @@
     </div>
   </div>
 
-  <!-- Main XTK Application Logic -->
-  <script type="text/javascript">
-  (function () {
-    'use strict';
+  <!-- Main Three.js Application Logic -->
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
     // =========================================================================
     // 1. PROCEDURAL SEEDED PRNG & NOISE GENERATION
@@ -1001,9 +987,9 @@
       rCtx.putImageData(rData, 0, 0);
 
       return {
-        diffuse: canvas,
-        normal: normalCanvas,
-        roughness: roughCanvas
+        diffuse: new THREE.CanvasTexture(canvas),
+        normal: new THREE.CanvasTexture(normalCanvas),
+        roughness: new THREE.CanvasTexture(roughCanvas)
       };
     }
 
@@ -1030,9 +1016,9 @@
         this.sandCanvas.height = this.height;
         this.renderStaticSand();
 
-        // XTK clamps textures to edge internally (TEXTURE_WRAP_S/T = CLAMP_TO_EDGE).
-        this.lightTint = null;
-        this.dirty = true;
+        this.texture = new THREE.CanvasTexture(this.canvas);
+        this.texture.wrapS = THREE.ClampToEdgeWrapping;
+        this.texture.wrapT = THREE.ClampToEdgeWrapping;
 
         this.waveTime = 0;
         this.update(0);
@@ -1227,8 +1213,7 @@
         }
         ctx.restore();
 
-        bakeFaceLight(this.ctx, this.width, this.height, this.lightTint);
-        this.dirty = true;
+        this.texture.needsUpdate = true;
       }
     }
 
@@ -1264,8 +1249,8 @@
         // Generate volcanic fissure crack paths (lava stripes as sketched!)
         this.fissures = this.generateFissures();
 
-        this.lightTint = null;
-        this.dirty = true;
+        this.diffuseTexture = new THREE.CanvasTexture(this.canvas);
+        this.emissiveTexture = new THREE.CanvasTexture(this.emissiveCanvas);
 
         this.lavaTime = 0;
         this.update(0);
@@ -1402,9 +1387,8 @@
           eCtx.restore();
         }
 
-        bakeFaceLight(this.ctx, this.width, this.height, this.lightTint);
-        applyLavaBloom(this.ctx, this.emissiveCanvas, this.width, this.height);
-        this.dirty = true;
+        this.diffuseTexture.needsUpdate = true;
+        this.emissiveTexture.needsUpdate = true;
       }
     }
 
@@ -1527,466 +1511,394 @@
       }
     }
 
-
     // =========================================================================
-    // 6. XTK SCENE CONSTRUCTION  (X.renderer3D / X.object / X.texture)
+    // 6. MAIN APPLICATION INITIALIZATION & 3D SCENE SETUP
     // =========================================================================
-    // XTK's camera is fixed, with near=1 / far=10000, so a 1.6-unit cube would sit
-    // right on the near plane: the whole scene is modelled 100x larger instead.
-    // Its nominal "45" degrees resolves to an effective vertical FOV of 58.31
-    // (read back from the projection matrix as 2*atan(1/m[5])), so every camera
-    // distance is scaled by tan(42/2) / tan(58.31/2) to frame the cube exactly the
-    // way the original 42 degree camera did. Both are pure scale: the image is
-    // unchanged, only the units are.
-    const WORLD = 100;
-    const FOV_FIT = 0.68812;
-    const HALF = 0.8 * WORLD;
-
-    // XTK shades untextured geometry only - textured fragments come straight from
-    // the sampler (gl_FragColor = textureSum). The per-face response of the
-    // original three-point light rig is therefore baked into each canvas as a
-    // multiply tint before upload.
-    const WHITE_TINT = 'rgb(255,255,255)';
-    const FACE_LAYOUT = [
-      { key: '+X', n: [ 1, 0, 0], u: [ 0, 0,-1], v: [0, 1, 0], tint: 'rgb(226,246,252)' },
-      { key: '-X', n: [-1, 0, 0], u: [ 0, 0, 1], v: [0, 1, 0], tint: 'rgb(118,136,156)' },
-      // +Y takes the sun head-on and the lava light from below, so it needs no
-      // darkening at all; applyLavaBloom supplies its warm lift.
-      { key: '+Y', n: [ 0, 1, 0], u: [ 1, 0, 0], v: [0, 0,-1], tint: WHITE_TINT },
-      { key: '-Y', n: [ 0,-1, 0], u: [ 1, 0, 0], v: [0, 0, 1], tint: 'rgb(150,130,126)' },
-      { key: '+Z', n: [ 0, 0, 1], u: [ 1, 0, 0], v: [0, 1, 0], tint: 'rgb(216,244,218)' },
-      { key: '-Z', n: [ 0, 0,-1], u: [-1, 0, 0], v: [0, 1, 0], tint: 'rgb(126,148,166)' }
-    ];
-
-    let renderer, gl, texturePool, emberBuffer;
-    const cubeFaces = [];
-    let flowerMesh, emberMesh;
+    let scene, camera, renderer, controls, composer, bloomPass;
+    let cubeMesh, emberParticles;
     let dynamicBeach1, dynamicBeach2, dynamicLava1, dynamicLava2;
     let autoRotate = true;
     let rotateSpeedMultiplier = 1.0;
     let waveSpeedMultiplier = 1.0;
-    let bloomStrength = 0.85;
-    let cubeRotY = 0, cubeRotX = 0;
     const soundscape = new AmbientSoundscape();
 
-    // Ember particle state - these live in world space and do not rotate.
-    const EMBER_COUNT = 140;
-    let emberPos, emberVel;
-
-    // Camera tween state
+    // Camera target tween variables
     let isTweeningCamera = false;
-    let camStart = [0, 0, 0], camEnd = [0, 0, 0];
+    let camStartPos = new THREE.Vector3();
+    let camEndPos = new THREE.Vector3();
+    let camTargetStart = new THREE.Vector3();
+    let camTargetEnd = new THREE.Vector3();
     let tweenProgress = 1.0;
     const TWEEN_DURATION = 1.2;
 
-    // --- helpers -------------------------------------------------------------
-
-    // X.triplets allocates its Float32Array from the constructor argument. Built
-    // as `new X.triplets()` that array has length zero and every add() is silently
-    // dropped, so the capacity has to be passed in.
-    function triplets(flat) {
-      const t = new X.triplets(flat.length);
-      for (let i = 0; i < flat.length; i += 3) t.add(flat[i], flat[i + 1], flat[i + 2]);
-      return t;
-    }
-
-    // Multiply a face canvas by its baked light colour. A tint within a few counts
-    // of white costs a full-canvas composite to change almost nothing, so it is
-    // skipped - this runs on every animated face, every frame.
-    function bakeFaceLight(ctx, w, h, tint) {
-      if (!tint || tint === WHITE_TINT) return;
-      ctx.save();
-      ctx.globalCompositeOperation = 'multiply';
-      ctx.fillStyle = tint;
-      ctx.fillRect(0, 0, w, h);
-      ctx.restore();
-    }
-
-    // Stand-in for the emissive map and UnrealBloomPass. A warm ambient lift makes
-    // the basalt read as lit rock rather than black, then the emissive canvas is
-    // washed back additively for the molten core. The surrounding halo that the
-    // bloom pass used to spread is the .lava-glow overlay, which the same slider
-    // drives - compositing it here would cost a second full-canvas pass a frame.
-    function applyLavaBloom(ctx, emissiveCanvas, w, h) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.fillStyle = 'rgb(48,21,11)';
-      ctx.fillRect(0, 0, w, h);
-      if (bloomStrength > 0) {
-        ctx.globalAlpha = Math.min(1, bloomStrength * 0.95);
-        ctx.drawImage(emissiveCanvas, 0, 0, w, h);
-      }
-      ctx.restore();
-    }
-
-    // Bake the generated normal map into the diffuse as directional relief, so the
-    // botanical faces keep the depth the original got from a live normalMap.
-    function bakeNormalRelief(diffuseCanvas, normalCanvas, light) {
-      const w = diffuseCanvas.width, h = diffuseCanvas.height;
-      const dCtx = diffuseCanvas.getContext('2d');
-      const dImg = dCtx.getImageData(0, 0, w, h);
-      const nImg = normalCanvas.getContext('2d').getImageData(0, 0, w, h);
-      const d = dImg.data, n = nImg.data;
-      for (let i = 0; i < d.length; i += 4) {
-        const nx = n[i] / 127.5 - 1.0;
-        const ny = n[i + 1] / 127.5 - 1.0;
-        const nz = n[i + 2] / 127.5 - 1.0;
-        const lambert = Math.max(0, nx * light[0] + ny * light[1] + nz * light[2]);
-        const shade = 0.82 + 0.42 * lambert;
-        d[i]     = Math.min(255, d[i]     * shade);
-        d[i + 1] = Math.min(255, d[i + 1] * shade);
-        d[i + 2] = Math.min(255, d[i + 2] * shade);
-      }
-      dCtx.putImageData(dImg, 0, 0);
-    }
-
-    // One cube face as two triangles, with an outward normal and upright UVs.
-    function buildFace(layout, half) {
-      const c = [layout.n[0] * half, layout.n[1] * half, layout.n[2] * half];
-      const corner = (su, sv) => [
-        c[0] + layout.u[0] * su * half + layout.v[0] * sv * half,
-        c[1] + layout.u[1] * su * half + layout.v[1] * sv * half,
-        c[2] + layout.u[2] * su * half + layout.v[2] * sv * half
-      ];
-      const bl = corner(-1, -1), br = corner(1, -1), tr = corner(1, 1), tl = corner(-1, 1);
-      const obj = new X.object();
-      obj.points  = triplets([].concat(bl, br, tr, bl, tr, tl));
-      obj.normals = triplets([].concat(layout.n, layout.n, layout.n,
-                                       layout.n, layout.n, layout.n));
-      obj.type = 'TRIANGLES';
-      // XTK r10 defines the textureCoordinateMap getter on `oc` but its setter on
-      // `tl`, and the renderer reads `oc` - so the field is written directly.
-      obj.oc = [0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1];
-      obj.textureCoordinateMap = obj.oc;
-      return obj;
-    }
-
-    // X.object.texture is getter-only and lazily builds its X.texture, so the
-    // texture is configured in place rather than assigned.
-    function uploadInitialTexture(obj, canvas) {
-      const px = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
-      obj.texture.rawData = new Uint8Array(px.data);
-      obj.texture.rawDataWidth = canvas.width;
-      obj.texture.rawDataHeight = canvas.height;
-    }
-
-    // Locate the renderer's id -> WebGLTexture map so animated faces can be pushed
-    // with texSubImage2D. XTK's own dirty path calls createTexture() on every
-    // update without deleting the previous one, which would leak a texture a frame.
-    function findTexturePool(probeId) {
-      for (const key in renderer) {
-        const candidate = renderer[key];
-        if (!candidate || typeof candidate.get !== 'function') continue;
-        let value = null;
-        try { value = candidate.get(probeId); } catch (e) { continue; }
-        if (value instanceof WebGLTexture) return candidate;
-      }
-      return null;
-    }
-
-    // Refreshing the embers through XTK's public path (assign points, then
-    // modified()) sends the renderer round its whole object-update routine for
-    // what is only 1.7 KB of positions. That routine touches the document, and
-    // with the blurred HUD panels on screen the forced style recalc cost more
-    // than the entire rest of the frame - 685 ms a frame against 49 ms with the
-    // HUD hidden. The vertex buffer is therefore refreshed in place, exactly the
-    // way the animated face textures are.
-    function findPointBuffer(objectId) {
-      const pool = renderer.qc;            // renderer's point-buffer map: id -> record
-      if (!pool || typeof pool.get !== 'function') return null;
-      let record = null;
-      try { record = pool.get(objectId); } catch (e) { return null; }
-      return (record && record.P && gl.isBuffer(record.P)) ? record.P : null;
-    }
-
-    let fallbackTick = 0;
-    function pushFaceTexture(face) {
-      const glTexture = texturePool && texturePool.get(face.object.texture.id);
-      if (glTexture) {
-        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-        gl.bindTexture(gl.TEXTURE_2D, glTexture);
-        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, face.canvas);
-        gl.bindTexture(gl.TEXTURE_2D, null);
-        return;
-      }
-      // Fallback to XTK's public path, throttled because it reallocates each time.
-      if ((fallbackTick++ & 3) !== 0) return;
-      const px = face.canvas.getContext('2d')
-        .getImageData(0, 0, face.canvas.width, face.canvas.height);
-      face.object.texture.rawData = new Uint8Array(px.data);
-      face.object.texture.rawDataWidth = face.canvas.width;
-      face.object.texture.rawDataHeight = face.canvas.height;
-      face.object.modified();
-    }
-
     function init() {
-      renderer = new X.renderer3D();
-      renderer.container = 'webgl-canvas-container';
-      renderer.init();
-      renderer.bgColor = [0.023, 0.031, 0.055];
+      const container = document.getElementById('webgl-canvas-container');
 
-      const glCanvas = document.querySelector('#webgl-canvas-container canvas');
-      gl = glCanvas.getContext('experimental-webgl') || glCanvas.getContext('webgl');
+      // A. Create Three.js Scene
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x06080e);
 
-      // --- Synthesize the textures for all six faces ----------------------
+      // B. Setup Camera with standard perspective
+      camera = new THREE.PerspectiveCamera(
+        42,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        100
+      );
+      // Default view: Isometric Sketch Corner Angle (matches sketch!)
+      camera.position.set(2.4, 2.0, 2.6);
+
+      // C. WebGL Renderer with High-Performance Tone Mapping
+      renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.15;
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      container.appendChild(renderer.domElement);
+
+      // D. Smooth OrbitControls
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.minDistance = 1.8;
+      controls.maxDistance = 8.0;
+      controls.target.set(0, 0, 0);
+
+      // E. UnrealBloomPass Post-Processing (Neon lava aura & ocean glints)
+      const renderScene = new RenderPass(scene, camera);
+      bloomPass = new UnrealBloomPass(
+        new THREE.Vector2(window.innerWidth, window.innerHeight),
+        0.85,  // strength
+        0.45,  // radius
+        0.75   // threshold
+      );
+
+      composer = new EffectComposer(renderer);
+      composer.addPass(renderScene);
+      composer.addPass(bloomPass);
+
+      // F. Lighting Setup
+      // Key Sun Light
+      const sunLight = new THREE.DirectionalLight(0xfffaed, 2.2);
+      sunLight.position.set(5, 8, 4);
+      sunLight.castShadow = true;
+      sunLight.shadow.mapSize.width = 2048;
+      sunLight.shadow.mapSize.height = 2048;
+      scene.add(sunLight);
+
+      // Ambient Fill
+      const ambientLight = new THREE.AmbientLight(0x222a3a, 1.4);
+      scene.add(ambientLight);
+
+      // Point Light 1: Fiery Volcanic Glow (radiating from top lava face)
+      const lavaLight = new THREE.PointLight(0xff5500, 3.5, 6);
+      lavaLight.position.set(0, 2.2, 0);
+      scene.add(lavaLight);
+
+      // Point Light 2: Turquoise Ocean Caustic Reflection
+      const waterLight = new THREE.PointLight(0x06b6d4, 2.0, 5);
+      waterLight.position.set(2.2, -0.2, 0.5);
+      scene.add(waterLight);
+
+      // Point Light 3: Botanical Living Wall Sunlight
+      const gardenLight = new THREE.PointLight(0x86efac, 1.8, 5);
+      gardenLight.position.set(0.5, 0.2, 2.2);
+      scene.add(gardenLight);
+
+      // G. Synthesize Textures for All 6 Cube Faces
+      // 1. Botanical Garden (2 faces)
       const botanical1 = createBotanicalGardenTexture(101);
       const botanical2 = createBotanicalGardenTexture(777);
-      bakeNormalRelief(botanical1.diffuse, botanical1.normal, [0.45, 0.62, 0.64]);
-      bakeNormalRelief(botanical2.diffuse, botanical2.normal, [0.45, 0.62, 0.64]);
 
+      // 2. Beach Elements: Half Sand, Half Water (2 faces)
       dynamicBeach1 = new DynamicBeachTexture(202, false);
       dynamicBeach2 = new DynamicBeachTexture(505, true);
-      dynamicLava1  = new DynamicVolcanicLavaTexture(303);
-      dynamicLava2  = new DynamicVolcanicLavaTexture(909);
 
-      // Face -> theme mapping, identical to the original BoxGeometry material
-      // order, so the default corner view still shows botanical / beach / lava.
-      const sources = [
-        { canvas: dynamicBeach1.canvas, dynamic: dynamicBeach1 },  // +X Beach 1
-        { canvas: botanical2.diffuse,   dynamic: null },           // -X Botanical 2
-        { canvas: dynamicLava1.canvas,  dynamic: dynamicLava1 },   // +Y Lava 1
-        { canvas: dynamicLava2.canvas,  dynamic: dynamicLava2 },   // -Y Lava 2
-        { canvas: botanical1.diffuse,   dynamic: null },           // +Z Botanical 1
-        { canvas: dynamicBeach2.canvas, dynamic: dynamicBeach2 }   // -Z Beach 2
+      // 3. Volcanic Igneous Rock & Neon Lava (2 faces)
+      dynamicLava1 = new DynamicVolcanicLavaTexture(303);
+      dynamicLava2 = new DynamicVolcanicLavaTexture(909);
+
+      // H. Build Materials for the 6 Faces
+      // Standard BoxGeometry face indices:
+      // 0: +X (Right)  -> Beach Element 1
+      // 1: -X (Left)   -> Botanical Garden 2
+      // 2: +Y (Top)    -> Volcanic Lava 1
+      // 3: -Y (Bottom) -> Volcanic Lava 2
+      // 4: +Z (Front)  -> Botanical Garden 1
+      // 5: -Z (Back)   -> Beach Element 2
+      // Notice: Default isometric camera view at (+X, +Y, +Z) immediately sees:
+      // Front (+Z: Botanical), Right (+X: Beach), Top (+Y: Lava) -> EXACT MATCH TO SKETCH!
+
+      const materials = [
+        // Face 0: +X (Right) -> Beach Element 1
+        new THREE.MeshStandardMaterial({
+          map: dynamicBeach1.texture,
+          roughness: 0.25,
+          metalness: 0.1
+        }),
+        // Face 1: -X (Left) -> Botanical Garden 2
+        new THREE.MeshStandardMaterial({
+          map: botanical2.diffuse,
+          normalMap: botanical2.normal,
+          roughnessMap: botanical2.roughness,
+          roughness: 0.65,
+          metalness: 0.05
+        }),
+        // Face 2: +Y (Top) -> Volcanic Lava 1
+        new THREE.MeshStandardMaterial({
+          map: dynamicLava1.diffuseTexture,
+          emissiveMap: dynamicLava1.emissiveTexture,
+          emissive: new THREE.Color(0xff4400),
+          emissiveIntensity: 2.2,
+          roughness: 0.75,
+          metalness: 0.2
+        }),
+        // Face 3: -Y (Bottom) -> Volcanic Lava 2
+        new THREE.MeshStandardMaterial({
+          map: dynamicLava2.diffuseTexture,
+          emissiveMap: dynamicLava2.emissiveTexture,
+          emissive: new THREE.Color(0xff4400),
+          emissiveIntensity: 2.2,
+          roughness: 0.75,
+          metalness: 0.2
+        }),
+        // Face 4: +Z (Front) -> Botanical Garden 1
+        new THREE.MeshStandardMaterial({
+          map: botanical1.diffuse,
+          normalMap: botanical1.normal,
+          roughnessMap: botanical1.roughness,
+          roughness: 0.65,
+          metalness: 0.05
+        }),
+        // Face 5: -Z (Back) -> Beach Element 2
+        new THREE.MeshStandardMaterial({
+          map: dynamicBeach2.texture,
+          roughness: 0.25,
+          metalness: 0.1
+        })
       ];
 
-      for (let i = 0; i < 6; i++) {
-        const layout = FACE_LAYOUT[i];
-        const src = sources[i];
-        if (src.dynamic) {
-          // Dynamic faces re-bake their tint at the end of every update().
-          src.dynamic.lightTint = layout.tint;
-          src.dynamic.update(0, waveSpeedMultiplier);
-        } else {
-          bakeFaceLight(src.canvas.getContext('2d'),
-                        src.canvas.width, src.canvas.height, layout.tint);
-        }
-        const obj = buildFace(layout, HALF);
-        uploadInitialTexture(obj, src.canvas);
-        renderer.add(obj);
-        cubeFaces.push({ object: obj, canvas: src.canvas, dynamic: src.dynamic });
-      }
+      // I. Create the Central 3D Cube Geometry
+      const cubeGeometry = new THREE.BoxGeometry(1.6, 1.6, 1.6, 16, 16, 16);
+      cubeMesh = new THREE.Mesh(cubeGeometry, materials);
+      cubeMesh.castShadow = true;
+      cubeMesh.receiveShadow = true;
+      scene.add(cubeMesh);
 
-      addBotanical3DExtrusions();
-      addVolcanicEmberSystem();
-      addSceneAnchor();
+      // J. Add 3D Botanical Elements Sprouting Outward (as in the sketch!)
+      addBotanical3DExtrusions(cubeMesh);
 
-      renderer.camera.focus = [0, 0, 0];
-      renderer.camera.up = [0, 1, 0];
-      renderer.camera.position = presetPosition('sketch');
-      renderer.render();
+      // K. Add 3D Volcanic Rising Ember Particles
+      addVolcanicEmberSystem(scene);
 
-      // Both pools only exist once the first render has uploaded the scene.
-      texturePool = findTexturePool(cubeFaces[0].object.texture.id);
-      emberBuffer = findPointBuffer(emberMesh.id);
+      // L. Remove Loader Overlay
+      setTimeout(() => {
+        document.getElementById('loader').classList.add('hidden');
+      }, 500);
 
+      // M. Setup User Interface Handlers
       setupEventListeners();
-      setTimeout(() => document.getElementById('loader').classList.add('hidden'), 500);
+
+      // N. Start Animation Loop
       animate(0);
     }
 
-    // --- 3D botanical extrusions ---------------------------------------------
-    // XTK carries one colour per object, so every rose and leaf is merged into a
-    // single mesh with per-vertex colours instead of ~70 separate objects.
-    function pushSphere(P, N, C, cx, cy, cz, r, color, scale) {
-      const seg = 8, ring = 6;
-      const sx = scale ? scale[0] : 1, sy = scale ? scale[1] : 1, sz = scale ? scale[2] : 1;
-      const at = (i, j) => {
-        const theta = (i / seg) * Math.PI * 2;
-        const phi = (j / ring) * Math.PI;
-        const nx = Math.sin(phi) * Math.cos(theta);
-        const ny = Math.cos(phi);
-        const nz = Math.sin(phi) * Math.sin(theta);
-        return [cx + nx * r * sx, cy + ny * r * sy, cz + nz * r * sz, nx, ny, nz];
-      };
-      for (let j = 0; j < ring; j++) {
-        for (let i = 0; i < seg; i++) {
-          const a = at(i, j), b = at(i + 1, j), c = at(i + 1, j + 1), d = at(i, j + 1);
-          [a, b, c, a, c, d].forEach(v => {
-            P.push(v[0], v[1], v[2]);
-            N.push(v[3], v[4], v[5]);
-            C.push(color[0], color[1], color[2]);
-          });
-        }
-      }
-    }
+    // Add 3D procedural roses, leaves, and buds protruding from the botanical edges
+    function addBotanical3DExtrusions(parentCube) {
+      const flowerGroup = new THREE.Group();
 
-    function pushCone(P, N, C, cx, cy, cz, radius, height, color, tiltZ) {
-      const seg = 6;
-      const cos = Math.cos(tiltZ || 0), sin = Math.sin(tiltZ || 0);
-      const place = (x, y, z) => [cx + x * cos - y * sin, cy + x * sin + y * cos, cz + z];
-      for (let i = 0; i < seg; i++) {
-        const t0 = (i / seg) * Math.PI * 2, t1 = ((i + 1) / seg) * Math.PI * 2;
-        const b0 = place(Math.cos(t0) * radius * 1.8, 0, Math.sin(t0) * radius * 0.3);
-        const b1 = place(Math.cos(t1) * radius * 1.8, 0, Math.sin(t1) * radius * 0.3);
-        const tip = place(0, height, 0);
-        const nx = Math.cos((t0 + t1) / 2), nz = Math.sin((t0 + t1) / 2);
-        [b0, b1, tip].forEach(v => {
-          P.push(v[0], v[1], v[2]);
-          N.push(nx, 0.35, nz);
-          C.push(color[0], color[1], color[2]);
+      // Helper: Create a small 3D rose mesh
+      const createMiniRose = (colorHex, radius = 0.09) => {
+        const roseMeshGroup = new THREE.Group();
+        const petalGeo = new THREE.SphereGeometry(radius * 0.65, 8, 8);
+        petalGeo.scale(1.2, 0.45, 1.0);
+        const petalMat = new THREE.MeshStandardMaterial({
+          color: colorHex,
+          roughness: 0.45,
+          metalness: 0.05
         });
-      }
-    }
 
-    function addBotanical3DExtrusions() {
-      const P = [], N = [], C = [];
-      const S = WORLD;
-      // Roses and leaves sprouting from the botanical edges, as in the sketch.
-      const edgeFlowers = [
-        { x: -0.82, y:  0.45, z:  0.82, col: [0.96, 0.25, 0.37] },
-        { x: -0.83, y:  0.05, z:  0.82, col: [0.98, 0.44, 0.52] },
-        { x: -0.82, y: -0.42, z:  0.82, col: [0.75, 0.07, 0.24] },
-        { x: -0.45, y:  0.82, z:  0.82, col: [1.00, 0.63, 0.71] },
-        { x:  0.35, y: -0.82, z:  0.82, col: [0.96, 0.25, 0.37] },
-        { x: -0.82, y:  0.25, z:  0.20, col: [0.96, 0.25, 0.37] },
-        { x: -0.82, y: -0.30, z: -0.35, col: [0.98, 0.44, 0.52] }
+        for (let i = 0; i < 7; i++) {
+          const petal = new THREE.Mesh(petalGeo, petalMat);
+          const a = (i / 7) * Math.PI * 2;
+          petal.position.set(Math.cos(a) * radius * 0.45, 0, Math.sin(a) * radius * 0.45);
+          petal.rotation.y = a + 0.5;
+          petal.rotation.x = 0.3;
+          roseMeshGroup.add(petal);
+        }
+
+        const centerGeo = new THREE.SphereGeometry(radius * 0.35, 8, 8);
+        const centerMat = new THREE.MeshStandardMaterial({ color: 0x881337 });
+        const center = new THREE.Mesh(centerGeo, centerMat);
+        roseMeshGroup.add(center);
+
+        return roseMeshGroup;
+      };
+
+      // Helper: Create small 3D leaf
+      const createMiniLeaf = (colorHex = 0x22c55e, length = 0.16) => {
+        const leafGeo = new THREE.ConeGeometry(0.045, length, 6);
+        leafGeo.scale(1.8, 1, 0.3);
+        const leafMat = new THREE.MeshStandardMaterial({
+          color: colorHex,
+          roughness: 0.4,
+          side: THREE.DoubleSide
+        });
+        const leaf = new THREE.Mesh(leafGeo, leafMat);
+        leaf.rotation.x = Math.PI / 2;
+        return leaf;
+      };
+
+      // Sprout flowers and leaves along the front-left edges (+Z and -X)
+      const edgeFlowerPositions = [
+        { x: -0.82, y: 0.45, z: 0.82, rotZ: 0.3, col: 0xf43f5e },  // Rose near top corner
+        { x: -0.83, y: 0.05, z: 0.82, rotZ: -0.2, col: 0xfb7185 }, // Mid rose
+        { x: -0.82, y: -0.42, z: 0.82, rotZ: 0.4, col: 0xbe123c }, // Lower rose
+        { x: -0.45, y: 0.82, z: 0.82, rotX: 0.4, col: 0xffa0b5 },  // Top edge blossom
+        { x: 0.35,  y: -0.82, z: 0.82, rotX: -0.3, col: 0xf43f5e }, // Bottom edge rose
+        { x: -0.82, y: 0.25, z: 0.20, rotY: -0.4, col: 0xf43f5e }, // Left face side rose
+        { x: -0.82, y: -0.30, z: -0.35, rotY: -0.3, col: 0xfb7185 } // Left back rose
       ];
 
-      for (const f of edgeFlowers) {
-        const cx = f.x * S, cy = f.y * S, cz = f.z * S;
-        const radius = 0.08 * S;
-        for (let i = 0; i < 7; i++) {
-          const a = (i / 7) * Math.PI * 2;
-          pushSphere(P, N, C,
-            cx + Math.cos(a) * radius * 0.45, cy, cz + Math.sin(a) * radius * 0.45,
-            radius * 0.65, f.col, [1.2, 0.45, 1.0]);
-        }
-        pushSphere(P, N, C, cx, cy, cz, radius * 0.35, [0.53, 0.07, 0.21], null);
+      for (const ef of edgeFlowerPositions) {
+        const rose = createMiniRose(ef.col, 0.08);
+        rose.position.set(ef.x, ef.y, ef.z);
+        if (ef.rotZ) rose.rotation.z = ef.rotZ;
+        if (ef.rotX) rose.rotation.x = ef.rotX;
+        if (ef.rotY) rose.rotation.y = ef.rotY;
+        flowerGroup.add(rose);
+
+        // Add 2 leaves flanking each flower
         for (let l = 0; l < 2; l++) {
-          pushCone(P, N, C,
-            cx + (l === 0 ? 0.06 : -0.06) * S, cy - 0.05 * S, cz + (l === 0 ? 0.04 : -0.04) * S,
-            0.045 * S, 0.12 * S, [0.09, 0.64, 0.29], l === 0 ? 0.5 : -0.5);
+          const leaf = createMiniLeaf(0x16a34a, 0.12);
+          leaf.position.set(ef.x + (l === 0 ? 0.06 : -0.06), ef.y - 0.05, ef.z + (l === 0 ? 0.04 : -0.04));
+          leaf.rotation.z = (l === 0 ? 0.5 : -0.5);
+          flowerGroup.add(leaf);
         }
       }
 
-      flowerMesh = new X.object();
-      flowerMesh.points  = triplets(P);
-      flowerMesh.normals = triplets(N);
-      flowerMesh.colors  = triplets(C);
-      flowerMesh.type = 'TRIANGLES';
-      renderer.add(flowerMesh);
+      parentCube.add(flowerGroup);
     }
 
-    // --- Volcanic ember particles --------------------------------------------
-    function addVolcanicEmberSystem() {
-      emberPos = new Float32Array(EMBER_COUNT * 3);
-      emberVel = new Float32Array(EMBER_COUNT * 3);
-      for (let i = 0; i < EMBER_COUNT; i++) {
-        const top = Math.random() > 0.4;
-        emberPos[i * 3]     = (Math.random() - 0.5) * 1.5 * WORLD;
-        emberPos[i * 3 + 1] = (top ? 0.82 + Math.random() * 0.8 : -0.82 - Math.random() * 0.8) * WORLD;
-        emberPos[i * 3 + 2] = (Math.random() - 0.5) * 1.5 * WORLD;
-        emberVel[i * 3]     = (Math.random() - 0.5) * 0.008 * WORLD;
-        emberVel[i * 3 + 1] = (top ? 0.006 + Math.random() * 0.012 : -0.006 - Math.random() * 0.012) * WORLD;
-        emberVel[i * 3 + 2] = (Math.random() - 0.5) * 0.008 * WORLD;
-      }
-      // Per-ember colour stands in for the original's varied particle scale: some
-      // sparks read as white-hot, others as cooling orange. Set once - only the
-      // positions are rebuilt per frame, so the colour buffer is reused.
-      const emberColors = [];
-      for (let i = 0; i < EMBER_COUNT; i++) {
-        const heat = Math.random();
-        emberColors.push(1.0, 0.38 + heat * 0.5, 0.06 + heat * 0.42);
+    // Add rising volcanic spark & ember particles
+    function addVolcanicEmberSystem(scene) {
+      const emberCount = 140;
+      const emberGeo = new THREE.BufferGeometry();
+      const positions = new Float32Array(emberCount * 3);
+      const velocities = new Float32Array(emberCount * 3);
+      const scales = new Float32Array(emberCount);
+
+      for (let i = 0; i < emberCount; i++) {
+        // Spawn near the top (+Y) or bottom (-Y) lava faces
+        const isTop = Math.random() > 0.4;
+        positions[i * 3]     = (Math.random() - 0.5) * 1.5;
+        positions[i * 3 + 1] = isTop ? 0.82 + Math.random() * 0.8 : -0.82 - Math.random() * 0.8;
+        positions[i * 3 + 2] = (Math.random() - 0.5) * 1.5;
+
+        velocities[i * 3]     = (Math.random() - 0.5) * 0.008;
+        velocities[i * 3 + 1] = isTop ? 0.006 + Math.random() * 0.012 : -0.006 - Math.random() * 0.012;
+        velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.008;
+
+        scales[i] = Math.random() * 0.035 + 0.015;
       }
 
-      emberMesh = new X.object();
-      emberMesh.points  = triplets(Array.from(emberPos));
-      // A zero normal makes XTK's shader skip lighting and emit the flat colour,
-      // which is what the additive point sprites did in the original.
-      emberMesh.normals = triplets(new Array(EMBER_COUNT * 3).fill(0));
-      emberMesh.colors  = triplets(emberColors);
-      emberMesh.type = 'POINTS';
-      emberMesh.pointsize = 4;
-      renderer.add(emberMesh);
-    }
+      emberGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
-    // XTK subtracts the scene bounding-box centre from every vertex, and that box
-    // only ever grows - so as the embers spread, the whole scene would creep off
-    // centre. An invisible, symmetric pair of corner points larger than anything
-    // else pins that centre at the origin for the life of the scene.
-    function addSceneAnchor() {
-      const R = 2.6 * WORLD;
-      const anchor = new X.object();
-      anchor.points  = triplets([-R, -R, -R, R, R, R]);
-      anchor.normals = triplets([0, 0, 0, 0, 0, 0]);
-      anchor.type = 'POINTS';
-      anchor.visible = false;
-      renderer.add(anchor);
+      // Circular glowing particle texture
+      const pCanvas = document.createElement('canvas');
+      pCanvas.width = 32;
+      pCanvas.height = 32;
+      const pCtx = pCanvas.getContext('2d');
+      const radGrad = pCtx.createRadialGradient(16, 16, 0, 16, 16, 16);
+      radGrad.addColorStop(0, '#ffffff');
+      radGrad.addColorStop(0.3, '#ffaa00');
+      radGrad.addColorStop(0.7, '#ff3b00');
+      radGrad.addColorStop(1, 'rgba(255, 59, 0, 0)');
+      pCtx.fillStyle = radGrad;
+      pCtx.fillRect(0, 0, 32, 32);
+      const pTexture = new THREE.CanvasTexture(pCanvas);
+
+      const emberMat = new THREE.PointsMaterial({
+        size: 0.045,
+        map: pTexture,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        color: 0xff7722
+      });
+
+      emberParticles = new THREE.Points(emberGeo, emberMat);
+      emberParticles.userData = { velocities, emberCount };
+      scene.add(emberParticles);
     }
 
     // =========================================================================
     // 7. USER INTERFACE & CAMERA TRANSITION ENGINE
     // =========================================================================
-    function presetPosition(view) {
-      const k = WORLD * FOV_FIT;
-      if (view === 'garden') return [0, 0, 2.8 * k];
-      if (view === 'beach')  return [2.8 * k, 0, 0];
-      if (view === 'lava')   return [0, 2.8 * k, 0.05 * k];
-      return [2.4 * k, 2.0 * k, 2.6 * k];   // sketch corner / reset
-    }
-
-    function handleCameraPreset(view) {
-      camStart = renderer.camera.position;
-      camEnd = presetPosition(view);
-      if (view === 'reset') { cubeRotY = 0; cubeRotX = 0; }
-      isTweeningCamera = true;
-      tweenProgress = 0.0;
-    }
-
     function setupEventListeners() {
+      // Auto-rotation toggle button
       const btnRotate = document.getElementById('btn-rotate');
       btnRotate.addEventListener('click', () => {
         autoRotate = !autoRotate;
         btnRotate.classList.toggle('active', autoRotate);
       });
 
+      // Sound toggle button
       const btnSound = document.getElementById('btn-sound');
       const soundIcon = document.getElementById('sound-icon');
       const soundText = document.getElementById('sound-text');
       btnSound.addEventListener('click', () => {
         const isPlaying = soundscape.toggle();
-        soundIcon.textContent = isPlaying ? '\u{1F50A}' : '\u{1F507}';
+        soundIcon.textContent = isPlaying ? '🔊' : '🔇';
         soundText.textContent = isPlaying ? 'Sound: On' : 'Sound: Off';
         btnSound.classList.toggle('active', isPlaying);
       });
 
+      // Hide / Show HUD button
       const btnHud = document.getElementById('btn-hud');
       const hud = document.getElementById('hud');
-      btnHud.addEventListener('click', () => hud.classList.toggle('hidden'));
+      btnHud.addEventListener('click', () => {
+        hud.classList.toggle('hidden');
+      });
 
+      // Sliders
       const sliderSpeed = document.getElementById('slider-speed');
       const valSpeed = document.getElementById('val-speed');
       sliderSpeed.addEventListener('input', (e) => {
         rotateSpeedMultiplier = parseFloat(e.target.value);
-        valSpeed.textContent = rotateSpeedMultiplier.toFixed(1) + 'x';
+        valSpeed.textContent = `${rotateSpeedMultiplier.toFixed(1)}x`;
       });
 
       const sliderBloom = document.getElementById('slider-bloom');
       const valBloom = document.getElementById('val-bloom');
-      const lavaGlow = document.querySelector('.lava-glow');
       sliderBloom.addEventListener('input', (e) => {
-        bloomStrength = parseFloat(e.target.value);
-        valBloom.textContent = bloomStrength.toFixed(2) + 'x';
-        if (lavaGlow) lavaGlow.style.opacity = Math.min(1, bloomStrength * 0.5);
+        const strength = parseFloat(e.target.value);
+        bloomPass.strength = strength;
+        valBloom.textContent = `${strength.toFixed(2)}x`;
       });
 
       const sliderWaves = document.getElementById('slider-waves');
       const valWaves = document.getElementById('val-waves');
       sliderWaves.addEventListener('input', (e) => {
         waveSpeedMultiplier = parseFloat(e.target.value);
-        valWaves.textContent = waveSpeedMultiplier.toFixed(1) + 'x';
+        valWaves.textContent = `${waveSpeedMultiplier.toFixed(1)}x`;
       });
 
+      // Camera preset viewpoint buttons
       const presetButtons = document.querySelectorAll('.preset-btn');
       presetButtons.forEach(btn => {
         btn.addEventListener('click', () => {
           presetButtons.forEach(b => b.classList.remove('active'));
           btn.classList.add('active');
-          handleCameraPreset(btn.getAttribute('data-view'));
+
+          const view = btn.getAttribute('data-view');
+          handleCameraPreset(view);
         });
       });
 
+      // Keyboard shortcuts
       window.addEventListener('keydown', (e) => {
         if (e.code === 'Space') {
           e.preventDefault();
@@ -1996,99 +1908,125 @@
           hud.classList.toggle('hidden');
         } else if (e.key === 'm' || e.key === 'M') {
           btnSound.click();
-        } else if (e.key === '0') { handleCameraPreset('sketch');
-        } else if (e.key === '1') { handleCameraPreset('garden');
-        } else if (e.key === '2') { handleCameraPreset('beach');
-        } else if (e.key === '3') { handleCameraPreset('lava');
-        } else if (e.key === 'r' || e.key === 'R') { handleCameraPreset('reset'); }
+        } else if (e.key === '0') {
+          handleCameraPreset('sketch');
+        } else if (e.key === '1') {
+          handleCameraPreset('garden');
+        } else if (e.key === '2') {
+          handleCameraPreset('beach');
+        } else if (e.key === '3') {
+          handleCameraPreset('lava');
+        } else if (e.key === 'r' || e.key === 'R') {
+          handleCameraPreset('reset');
+        }
       });
 
+      // Window resize handler
       window.addEventListener('resize', onWindowResize);
     }
 
+    function handleCameraPreset(view) {
+      camStartPos.copy(camera.position);
+      camTargetStart.copy(controls.target);
+      camTargetEnd.set(0, 0, 0);
+
+      if (view === 'sketch') {
+        // Matches the handwritten sketch corner view
+        camEndPos.set(2.4, 2.0, 2.6);
+      } else if (view === 'garden') {
+        // Direct focus onto Botanical Vertical Garden face (+Z)
+        camEndPos.set(0, 0, 2.8);
+      } else if (view === 'beach') {
+        // Direct focus onto Beach Sand & Ocean face (+X)
+        camEndPos.set(2.8, 0, 0);
+      } else if (view === 'lava') {
+        // Direct focus onto Volcanic Lava face (+Y)
+        camEndPos.set(0, 2.8, 0.05);
+      } else if (view === 'reset') {
+        camEndPos.set(2.4, 2.0, 2.6);
+        cubeMesh.rotation.set(0, 0, 0);
+      }
+
+      isTweeningCamera = true;
+      tweenProgress = 0.0;
+    }
+
     function onWindowResize() {
-      // XTK recomputes the viewport and projection from the container size.
-      if (typeof renderer.resize === 'function') renderer.resize();
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      composer.setSize(window.innerWidth, window.innerHeight);
+      bloomPass.setSize(window.innerWidth, window.innerHeight);
     }
 
     // =========================================================================
     // 8. RENDER & ANIMATION LOOP
     // =========================================================================
     let lastTime = 0;
-    let emberTick = 0;
 
     function animate(currentTime) {
       requestAnimationFrame(animate);
+
       const delta = (currentTime - lastTime) * 0.001 || 0.016;
       lastTime = currentTime;
 
-      // 1. Dynamic texture animation, pushed straight into the live GL textures
+      // 1. Dynamic Texture Animation
       if (dynamicBeach1) dynamicBeach1.update(currentTime, waveSpeedMultiplier);
       if (dynamicBeach2) dynamicBeach2.update(currentTime, waveSpeedMultiplier);
-      if (dynamicLava1)  dynamicLava1.update(currentTime);
-      if (dynamicLava2)  dynamicLava2.update(currentTime);
-      for (const face of cubeFaces) {
-        if (face.dynamic && face.dynamic.dirty) {
-          pushFaceTexture(face);
-          face.dynamic.dirty = false;
-        }
-      }
+      if (dynamicLava1) dynamicLava1.update(currentTime);
+      if (dynamicLava2) dynamicLava2.update(currentTime);
 
-      // 2. Smooth auto-rotation, driven through X.matrix and X.transform
+      // 2. Smooth Auto-Rotation
       if (autoRotate && !isTweeningCamera) {
-        cubeRotY += 0.006 * rotateSpeedMultiplier;
-        cubeRotX = Math.sin(currentTime * 0.0008) * 0.08;
+        cubeMesh.rotation.y += 0.006 * rotateSpeedMultiplier;
+        cubeMesh.rotation.x = Math.sin(currentTime * 0.0008) * 0.08;
       }
-      const m = X.matrix.identity();
-      X.matrix.rotate(m, cubeRotY, 0, 1, 0);
-      X.matrix.rotate(m, cubeRotX, 1, 0, 0);
-      for (const face of cubeFaces) face.object.transform.matrix = m;
-      if (flowerMesh) flowerMesh.transform.matrix = m;
 
-      // 3. Camera tweening between the preset viewpoints
+      // 3. Camera Smooth Tweening
       if (isTweeningCamera) {
         tweenProgress += delta / TWEEN_DURATION;
-        if (tweenProgress >= 1.0) { tweenProgress = 1.0; isTweeningCamera = false; }
-        const t = tweenProgress < 0.5
-          ? 4 * tweenProgress * tweenProgress * tweenProgress
+        if (tweenProgress >= 1.0) {
+          tweenProgress = 1.0;
+          isTweeningCamera = false;
+        }
+
+        // Smooth cubic ease-in-out
+        const t = tweenProgress < 0.5 
+          ? 4 * tweenProgress * tweenProgress * tweenProgress 
           : 1 - Math.pow(-2 * tweenProgress + 2, 3) / 2;
-        renderer.camera.position = [
-          camStart[0] + (camEnd[0] - camStart[0]) * t,
-          camStart[1] + (camEnd[1] - camStart[1]) * t,
-          camStart[2] + (camEnd[2] - camStart[2]) * t
-        ];
+
+        camera.position.lerpVectors(camStartPos, camEndPos, t);
+        controls.target.lerpVectors(camTargetStart, camTargetEnd, t);
       }
 
-      // 4. Rising volcanic embers
-      if (emberMesh) {
-        for (let i = 0; i < EMBER_COUNT; i++) {
-          emberPos[i * 3]     += emberVel[i * 3];
-          emberPos[i * 3 + 1] += emberVel[i * 3 + 1];
-          emberPos[i * 3 + 2] += emberVel[i * 3 + 2];
-          if (emberPos[i * 3 + 1] > 2.2 * WORLD || emberPos[i * 3 + 1] < -2.2 * WORLD) {
-            const top = Math.random() > 0.4;
-            emberPos[i * 3]     = (Math.random() - 0.5) * 1.4 * WORLD;
-            emberPos[i * 3 + 1] = (top ? 0.82 : -0.82) * WORLD;
-            emberPos[i * 3 + 2] = (Math.random() - 0.5) * 1.4 * WORLD;
+      // 4. Update Volcanic Ember Particles
+      if (emberParticles) {
+        const pos = emberParticles.geometry.attributes.position.array;
+        const vel = emberParticles.userData.velocities;
+        const count = emberParticles.userData.emberCount;
+
+        for (let i = 0; i < count; i++) {
+          pos[i * 3]     += vel[i * 3];
+          pos[i * 3 + 1] += vel[i * 3 + 1];
+          pos[i * 3 + 2] += vel[i * 3 + 2];
+
+          // Respawn logic
+          if (pos[i * 3 + 1] > 2.2 || pos[i * 3 + 1] < -2.2) {
+            const isTop = Math.random() > 0.4;
+            pos[i * 3]     = (Math.random() - 0.5) * 1.4;
+            pos[i * 3 + 1] = isTop ? 0.82 : -0.82;
+            pos[i * 3 + 2] = (Math.random() - 0.5) * 1.4;
           }
         }
-        if (emberBuffer) {
-          gl.bindBuffer(gl.ARRAY_BUFFER, emberBuffer);
-          gl.bufferSubData(gl.ARRAY_BUFFER, 0, emberPos);
-          gl.bindBuffer(gl.ARRAY_BUFFER, null);
-        } else if ((emberTick++ & 7) === 0) {
-          // Fallback to XTK's public path, throttled because it is expensive.
-          emberMesh.points = triplets(Array.from(emberPos));
-          emberMesh.modified();
-        }
+        emberParticles.geometry.attributes.position.needsUpdate = true;
       }
 
-      renderer.render();
+      controls.update();
+      composer.render();
     }
 
+    // Initialize on window load
     window.addEventListener('load', init);
-
-  })();
   </script>
 </body>
 </html>
