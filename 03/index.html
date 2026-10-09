@@ -1,0 +1,213 @@
+<html>
+
+<head>
+    <style>
+        html,
+        body {
+            background-color: #000;
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden !important;
+        }
+    </style>
+
+    <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@latest/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@latest/examples/jsm/"
+      }
+    }
+    </script>
+
+    <script type="module">
+
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        var renderer, controls, scene, camera, invisible_plane;
+
+        var TORUSES = [];
+        var LASTOBJECT = null;
+        var PLACING = false;
+
+        var HOTPINK = 0xFF69B4;
+        var GRASSGREEN = 0x7CFC00;
+
+        var FLICKERING = false;
+        var WIREFRAME = false;
+
+        window.onload = function () {
+
+            // Three.js code goes here
+            scene = new THREE.Scene();
+
+            // setup the camera
+            var fov = 75;
+            var ratio = window.innerWidth / window.innerHeight;
+            var zNear = 1;
+            var zFar = 10000;
+            camera = new THREE.PerspectiveCamera(fov, ratio, zNear, zFar);
+            camera.position.set(0, 0, 100);
+
+            // create renderer and setup the canvas
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+
+
+            renderer.domElement.onmousedown = function (e) {
+
+                if (!e.shiftKey) return;
+
+                controls.enabled = false;
+
+                var pixel_coords = new THREE.Vector2(e.clientX, e.clientY);
+
+                var vp_coords = new THREE.Vector2(
+                    (pixel_coords.x / window.innerWidth) * 2 - 1,   // X
+                    -(pixel_coords.y / window.innerHeight) * 2 + 1); // Y
+
+                var vp_coords_near = new THREE.Vector3(vp_coords.x, vp_coords.y, 0);
+
+                var raycaster = new THREE.Raycaster();
+                raycaster.setFromCamera(vp_coords_near, camera);
+                var intersects = raycaster.intersectObject(invisible_plane);
+
+                if (intersects.length === 0) return;   // orbited until the plane is edge-on
+
+                LASTOBJECT = createTorus(intersects[0].point);
+                TORUSES.push(LASTOBJECT);
+                PLACING = true;
+
+            };
+            renderer.domElement.onmouseup = function (e) {
+
+                controls.enabled = true;
+                PLACING = false;
+
+            };
+
+            renderer.domElement.onmousemove = function (e) {
+
+                // only scale the torus we just placed, before the button is released
+                if (!PLACING) return;
+
+                var DELTA = -e.movementY * 0.01;
+                var before = LASTOBJECT.scale.x;
+
+                LASTOBJECT.scale.set(LASTOBJECT.scale.x + DELTA,
+                    LASTOBJECT.scale.y + DELTA,
+                    LASTOBJECT.scale.z + DELTA);
+
+                // flip hotpink <-> grassgreen whenever the scale crosses zero
+                if ((before < 0) !== (LASTOBJECT.scale.x < 0)) {
+                    LASTOBJECT.userData.isGreen = !LASTOBJECT.userData.isGreen;
+                    LASTOBJECT.material.color.set(
+                        LASTOBJECT.userData.isGreen ? GRASSGREEN : HOTPINK);
+                }
+
+            };
+
+            window.onkeypress = function (e) {
+
+                if (e.key == 'f') {
+
+                    FLICKERING = !FLICKERING;
+
+                    if (!FLICKERING) {
+                        for (var i = 0; i < TORUSES.length; i++) {
+                            TORUSES[i].material.opacity = 1.0;
+                        }
+                    }
+
+                } else if (e.key == 'w') {
+
+                    WIREFRAME = !WIREFRAME;
+
+                    for (var i = 0; i < TORUSES.length; i++) {
+                        TORUSES[i].material.wireframe = WIREFRAME;
+                    }
+
+                }
+
+            };
+
+            // setup lights
+            var ambientLight = new THREE.AmbientLight();
+            scene.add(ambientLight);
+
+            var light = new THREE.DirectionalLight(0xffffff, 5.0);
+            light.position.set(10, 100, 10);
+            scene.add(light);
+
+            // configure torus
+            const geometry = new THREE.TorusKnotGeometry(10, 3, 100, 16);
+            const material = new THREE.MeshStandardMaterial({ color: 0xff5f1f, transparent: true });
+            const torusKnot = new THREE.Mesh(geometry, material);
+            scene.add(torusKnot);
+            TORUSES.push(torusKnot);
+
+
+
+            //
+            // The invisible plane
+            //
+            var planeGeometry = new THREE.PlaneGeometry(10000, 10000);
+            var planeMaterial = new THREE.MeshBasicMaterial({
+                visible: false
+            });
+
+            invisible_plane = new THREE.Mesh(planeGeometry, planeMaterial);
+
+            scene.add(invisible_plane);
+            // interaction
+            controls = new OrbitControls(camera, renderer.domElement);
+
+            // call animation/rendering loop
+            animate();
+
+        };
+
+        function animate() {
+
+            requestAnimationFrame(animate);
+
+            if (FLICKERING) {
+                for (var i = 0; i < TORUSES.length; i++) {
+                    TORUSES[i].material.opacity = Math.random();
+                }
+            }
+
+            // and here..
+            controls.update();
+            renderer.render(scene, camera);
+
+        };
+        function createTorus(position) {
+
+            var geometry = new THREE.TorusKnotGeometry(10, 3, 100, 16);
+            var material = new THREE.MeshStandardMaterial({
+                color: HOTPINK,
+                transparent: true,
+                wireframe: WIREFRAME
+            });
+            var mesh = new THREE.Mesh(geometry, material);
+
+            mesh.position.copy(position);
+            mesh.userData.isGreen = false;
+
+            scene.add(mesh);
+
+            return mesh;
+        }
+    </script>
+</head>
+
+<body></body>
+
+</html>
